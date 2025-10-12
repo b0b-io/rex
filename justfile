@@ -13,13 +13,23 @@ docs fix="":
         markdownlint-cli2 "docs/**/*.md"
     fi
 
-# Build the project
-build:
-    cargo build
+# Build the project (optionally specify target: just build <target>)
+build target="":
+    #!/usr/bin/env bash
+    if [ -n "{{target}}" ]; then
+        cargo build --target {{target}}
+    else
+        cargo build
+    fi
 
-# Build the project in release mode
-build-release:
-    cargo build --release
+# Build the project in release mode (optionally specify target: just build-release <target>)
+build-release target="":
+    #!/usr/bin/env bash
+    if [ -n "{{target}}" ]; then
+        cargo build --release --target {{target}}
+    else
+        cargo build --release
+    fi
 
 # Run tests
 test:
