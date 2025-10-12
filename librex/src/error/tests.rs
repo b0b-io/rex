@@ -166,3 +166,83 @@ fn test_config_error_with_source() {
     assert!(err.source().is_some());
     assert!(err.source().unwrap().to_string().contains("file not found"));
 }
+
+// Tests for helper constructors
+
+#[test]
+fn test_network_helper_constructor() {
+    let err = RexError::network("connection refused");
+    assert!(matches!(err, RexError::Network { .. }));
+    assert!(err.to_string().contains("connection refused"));
+}
+
+#[test]
+fn test_network_with_source_helper_constructor() {
+    let io_err = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "connection refused");
+    let err = RexError::network_with_source("failed to connect", io_err);
+    assert!(matches!(err, RexError::Network { .. }));
+    assert!(err.source().is_some());
+}
+
+#[test]
+fn test_authentication_helper_constructor() {
+    let err = RexError::authentication("invalid credentials", Some(401));
+    assert!(matches!(err, RexError::Authentication { .. }));
+    assert!(err.to_string().contains("invalid credentials"));
+}
+
+#[test]
+fn test_not_found_helper_constructor() {
+    let err = RexError::not_found("repository", "myrepo");
+    assert!(matches!(err, RexError::NotFound { .. }));
+    assert!(err.to_string().contains("repository"));
+    assert!(err.to_string().contains("myrepo"));
+}
+
+#[test]
+fn test_rate_limit_helper_constructor() {
+    let err = RexError::rate_limit("too many requests", Some(60));
+    assert!(matches!(err, RexError::RateLimit { .. }));
+    assert!(err.to_string().contains("too many requests"));
+}
+
+#[test]
+fn test_server_helper_constructor() {
+    let err = RexError::server("internal server error", 500);
+    assert!(matches!(err, RexError::Server { .. }));
+    assert!(err.to_string().contains("internal server error"));
+}
+
+#[test]
+fn test_validation_helper_constructor() {
+    let err = RexError::validation("invalid manifest format");
+    assert!(matches!(err, RexError::Validation { .. }));
+    assert!(err.to_string().contains("invalid manifest format"));
+}
+
+#[test]
+fn test_validation_with_source_helper_constructor() {
+    let io_err = std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid data");
+    let err = RexError::validation_with_source("invalid format", io_err);
+    assert!(matches!(err, RexError::Validation { .. }));
+    assert!(err.source().is_some());
+}
+
+#[test]
+fn test_config_helper_constructor() {
+    let err = RexError::config("invalid config file", Some("/path/to/config.toml"));
+    assert!(matches!(err, RexError::Config { .. }));
+    assert!(err.to_string().contains("invalid config file"));
+}
+
+#[test]
+fn test_config_with_source_helper_constructor() {
+    let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+    let err = RexError::config_with_source(
+        "failed to read config",
+        Some("/path/to/config.toml"),
+        io_err,
+    );
+    assert!(matches!(err, RexError::Config { .. }));
+    assert!(err.source().is_some());
+}

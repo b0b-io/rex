@@ -35,22 +35,67 @@ impl fmt::Display for Reference {
 
 impl Reference {
     /// Returns the registry part of the reference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use librex::reference::Reference;
+    /// use std::str::FromStr;
+    ///
+    /// let reference = Reference::from_str("ghcr.io/user/repo:latest").unwrap();
+    /// assert_eq!(reference.registry(), "ghcr.io");
+    /// ```
     pub fn registry(&self) -> &str {
         self.0.registry()
     }
 
     /// Returns the repository part of the reference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use librex::reference::Reference;
+    /// use std::str::FromStr;
+    ///
+    /// let reference = Reference::from_str("ghcr.io/user/repo:latest").unwrap();
+    /// assert_eq!(reference.repository(), "user/repo");
+    /// ```
     pub fn repository(&self) -> &str {
         self.0.repository()
     }
 
     /// Returns the tag part of the reference, if present.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use librex::reference::Reference;
+    /// use std::str::FromStr;
+    ///
+    /// let reference = Reference::from_str("ghcr.io/user/repo:latest").unwrap();
+    /// assert_eq!(reference.tag(), Some("latest"));
+    /// ```
     pub fn tag(&self) -> Option<&str> {
         self.0.tag()
     }
 
     /// Returns the digest part of the reference, if present.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use librex::reference::Reference;
+    /// use std::str::FromStr;
+    ///
+    /// let reference = Reference::from_str("ghcr.io/user/repo@sha256:7173b809ca12ec5dee4506cd86be934c4596dd234ee82c0662eac04a8c2c71dc").unwrap();
+    /// assert!(reference.digest().is_some());
+    /// ```
     pub fn digest(&self) -> Option<&str> {
         self.0.digest()
+    }
+
+    /// Returns a reference to the underlying `oci_spec::distribution::Reference`.
+    pub fn inner(&self) -> &OciReference {
+        &self.0
     }
 }
