@@ -268,6 +268,7 @@ dependencies = [
  "chrono-humanize",
  "humansize",
  "oci-spec",
+ "serde_json",
  "thiserror 1.0.69",
 ]
 
