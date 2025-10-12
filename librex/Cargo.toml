@@ -1,0 +1,13 @@
+[package]
+name = "librex"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror = "1.0"
+
+
+[dev-dependencies]
+# Test dependencies will be added as needed

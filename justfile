@@ -39,10 +39,6 @@ test:
 test-verbose:
     cargo test -- --nocapture
 
-# Check code without building
-check:
-    cargo check
-
 # Run clippy for linting (use 'just lint fix' to auto-fix)
 lint fix="":
     #!/usr/bin/env bash
@@ -65,8 +61,8 @@ fmt mode="":
 fmt-check:
     @just fmt check
 
-# Run all checks (docs, fmt-check, lint, test)
-ci: docs fmt-check lint test
+# Run all checks (docs, fmt-check, lint)
+check: docs fmt-check lint
 
 # Clean build artifacts
 clean:

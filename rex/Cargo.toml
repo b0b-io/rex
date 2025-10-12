@@ -1,0 +1,12 @@
+[package]
+name = "rex"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+librex = { path = "../librex" }
+
+[dev-dependencies]
+# Test dependencies will be added as needed
