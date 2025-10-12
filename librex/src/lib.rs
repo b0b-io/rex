@@ -11,4 +11,5 @@
 pub mod digest;
 pub mod error;
 pub mod format;
+pub mod oci;
 pub mod reference;
