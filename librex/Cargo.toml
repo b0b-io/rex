@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+base64 = "0.22"
 chrono = { version = "0.4.31", features = ["serde"] }
 chrono-humanize = "0.2.3"
 humansize = "2.1.3"
