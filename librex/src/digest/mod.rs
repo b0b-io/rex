@@ -32,3 +32,40 @@ impl fmt::Display for Digest {
         self.0.fmt(f)
     }
 }
+
+impl Digest {
+    /// Returns the algorithm part of the digest as a string (e.g., "sha256").
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use librex::digest::Digest;
+    /// use std::str::FromStr;
+    ///
+    /// let digest = Digest::from_str("sha256:7173b809ca12ec5dee4506cd86be934c4596dd234ee82c0662eac04a8c2c71dc").unwrap();
+    /// assert_eq!(digest.algorithm(), "sha256");
+    /// ```
+    pub fn algorithm(&self) -> String {
+        self.0.algorithm().to_string()
+    }
+
+    /// Returns the hex-encoded hash part of the digest.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use librex::digest::Digest;
+    /// use std::str::FromStr;
+    ///
+    /// let digest = Digest::from_str("sha256:7173b809ca12ec5dee4506cd86be934c4596dd234ee82c0662eac04a8c2c71dc").unwrap();
+    /// assert_eq!(digest.hex(), "7173b809ca12ec5dee4506cd86be934c4596dd234ee82c0662eac04a8c2c71dc");
+    /// ```
+    pub fn hex(&self) -> &str {
+        self.0.digest()
+    }
+
+    /// Returns a reference to the underlying `oci_spec::image::Digest`.
+    pub fn inner(&self) -> &OciDigest {
+        &self.0
+    }
+}
