@@ -67,7 +67,7 @@ just build
 just test
 
 # Run all checks (docs, format, lint, test)
-just ci
+just check
 
 # Format code
 just fmt
@@ -95,14 +95,19 @@ just clean
 
 ```text
 rex/
-├── Cargo.toml              # Rust package manifest
+├── Cargo.toml              # Workspace manifest
 ├── justfile                # Command runner tasks
-├── src/                    # Source code
-│   └── main.rs            # CLI entry point
+├── librex/                 # Core library crate
+│   ├── Cargo.toml
+│   └── src/
+├── rex/                    # CLI binary crate
+│   ├── Cargo.toml
+│   └── src/
 ├── docs/                   # Documentation
-│   ├── req.md             # Project requirements
-│   └── design.md          # Architecture and design
-└── README.md              # This file
+│   ├── req.md
+│   ├── design.md
+│   └── development.md
+└── README.md
 ```
 
 ## Contributing
@@ -112,7 +117,7 @@ Contributions are welcome! Please follow these steps:
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
-4. Run checks (`just ci`)
+4. Run checks (`just check`)
 5. Commit your changes using conventional commits
 6. Push to your fork
 7. Open a Pull Request
@@ -121,7 +126,7 @@ Contributions are welcome! Please follow these steps:
 
 - Follow Rust standard conventions and idioms
 - Run `just fmt` before committing
-- Ensure `just ci` passes (docs, format, lint, tests)
+- Ensure `just check` passes (docs, format, lint, tests)
 - Add tests for new features
 - Update documentation as needed
 - Keep line length to 100 characters in markdown files
@@ -141,6 +146,7 @@ We follow conventional commits:
 
 - [Requirements](docs/req.md) - Detailed MVP requirements and scope
 - [Design](docs/design.md) - Architecture, module design, and CLI interface
+- [Development](docs/development.md) - Development guidelines and practices
 
 ## License
 
