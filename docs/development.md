@@ -323,6 +323,7 @@ This ensures:
 - 🧪 **Tests first** - Write tests with code, not after
 - 📦 **One piece at a time** - Implement incrementally
 - ✅ **All checks pass** - Run `just check` before committing
+- ✅ **Run tests** - Run `just test` before committing
 - 🔄 **Bisectable commits** - Every commit should build and test
 - 📝 **Descriptive messages** - Use colorful commit summaries
 - 🎯 **Minimal dependencies** - Add only what's needed, when needed

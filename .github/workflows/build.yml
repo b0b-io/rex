@@ -54,10 +54,22 @@ jobs:
           path: /usr/lib/gcc/aarch64-linux-gnu
           key: ${{ runner.os }}-aarch64-tools-gcc
 
+      - name: Cache apt lists
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        id: cache-apt-lists
+        uses: actions/cache@v4
+        with:
+          path: /var/lib/apt/lists
+          key: ${{ runner.os }}-apt-lists-${{ hashFiles('**/build.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-lists-
+
       - name: Install cross-compilation tools (Linux ARM64)
         if: matrix.target == 'aarch64-unknown-linux-gnu' && steps.cache-arm64-tools.outputs.cache-hit != 'true'
         run: |
-          sudo apt-get update
+          if [ "${{ steps.cache-apt-lists.outputs.cache-hit }}" != 'true' ]; then
+            sudo apt-get update
+          fi
           sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Configure cross-compilation linker (Linux ARM64)
