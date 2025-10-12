@@ -8,6 +8,7 @@
 // Modules will be added incrementally following the dependency order:
 // error → digest, reference, format → oci → client, auth → config, cache, registry → search
 
+pub mod auth;
 pub mod digest;
 pub mod error;
 pub mod format;
