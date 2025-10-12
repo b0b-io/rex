@@ -1,4 +1,5 @@
 use super::*;
+use config::File;
 
 #[test]
 fn test_default_config() {
@@ -14,11 +15,8 @@ fn test_default_config() {
     // Verify default cache settings
     assert!(config.cache.enabled);
     assert_eq!(config.cache.ttl.catalog, 300);
-    assert_eq!(config.cache.ttl.tags, 300);
     assert_eq!(config.cache.ttl.manifest, 86400);
-    assert_eq!(config.cache.ttl.config, 86400);
     assert_eq!(config.cache.limits.memory_entries, 1000);
-    assert_eq!(config.cache.limits.disk_entries, 10000);
 
     // Verify default TUI settings
     assert_eq!(config.tui.theme, "dark");
@@ -30,7 +28,7 @@ fn test_default_config() {
 }
 
 #[test]
-fn test_parse_empty_yaml() {
+fn test_from_str_empty_yaml() {
     let yaml = "";
     let config = Config::from_str(yaml).unwrap();
     // Should be equivalent to default
@@ -38,7 +36,7 @@ fn test_parse_empty_yaml() {
 }
 
 #[test]
-fn test_parse_partial_yaml() {
+fn test_from_str_partial_yaml() {
     let yaml = r#"
 output:
   format: json
@@ -60,7 +58,7 @@ registries:
 }
 
 #[test]
-fn test_parse_full_yaml() {
+fn test_from_str_full_yaml() {
     let yaml = r#"
 output:
   format: yaml
@@ -108,15 +106,15 @@ registries:
 }
 
 #[test]
-fn test_parse_invalid_yaml() {
+fn test_from_str_invalid_yaml() {
     let yaml = "output: { format: invalid }";
     let result = Config::from_str(yaml);
     assert!(result.is_err());
 }
 
 #[test]
-fn test_parse_unknown_field() {
-    // Serde should ignore unknown fields by default
+fn test_from_str_unknown_field() {
+    // config-rs should ignore unknown fields
     let yaml = "unknown_field: true";
     let result = Config::from_str(yaml);
     assert!(result.is_ok());

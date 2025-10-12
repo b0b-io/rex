@@ -3,13 +3,15 @@
 ## Implementation Decisions
 
 1.  **Configuration Format**:
-    - **Decision**: Use YAML (`config.yaml`) instead of TOML.
-    - **Rationale**: YAML's syntax is often considered more human-readable for nested structures, which our configuration will have (e.g., for registry lists, cache settings). It is also a very popular choice for configuration in the cloud-native ecosystem.
+    - **Decision**: Use YAML (`config.yaml`).
+    - **Rationale**: YAML's syntax is often considered more human-readable for the nested structures our configuration requires.
 
-2.  **Dependencies**:
-    - `serde` and `serde_yaml`: These are the standard, community-approved crates for serializing and deserializing YAML in Rust.
-    - `directories`: This crate provides a reliable, cross-platform way to locate the user's configuration directory (e.g., `~/.config` on Linux, `%APPDATA%` on Windows), which is essential for finding our `config.yaml` file.
+2.  **Refactor to `config-rs` Crate**:
+    - **Initial Implementation**: The module was first implemented with a manual loading function using `serde_yaml` and the `directories` crate.
+    - **Decision**: We have refactored the module to use the `config-rs` crate.
+    - **Rationale**: This decision was made because `config-rs` provides a robust mechanism for merging multiple configuration sources (files, environment variables, etc.), which is a core requirement from our `design.md`. Using a dedicated, mature library aligns better with our "Don't Reinvent the Wheel" principle and will simplify future development, particularly when adding support for environment variable overrides. The structs we defined with `serde` are fully compatible with this new approach.
 
-3.  **Structure**:
-    - The configuration is represented by a set of structs that can be directly deserialized from the YAML file using `serde`. This is a robust and type-safe approach.
-    - A `Config::load()` method will be implemented to handle finding and parsing the configuration file, with a `Config::default()` fallback if the file doesn't exist.
+## Dependencies
+
+- `config-rs`: The core library for handling layered configuration.
+- `serde`: Used for deserializing the configuration into our Rust structs.
