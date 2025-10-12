@@ -1,4 +1,4 @@
-# 🔭 Rex - Registry Explorer
+# 🔭 rex - a terminal native container registry explorer
 
 A fast, modern command-line tool for exploring OCI-compliant container
 registries.
