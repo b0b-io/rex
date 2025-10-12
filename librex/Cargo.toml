@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+oci-spec = "0.8.3"
 thiserror = "1.0"
 
 
