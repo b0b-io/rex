@@ -29,7 +29,7 @@ fn test_default_config() {
 #[test]
 fn test_from_str_empty_yaml() {
     let yaml = "";
-    let config = Config::from_str(yaml).unwrap();
+    let config = Config::from_yaml_str(yaml).unwrap();
     // Should be equivalent to default
     assert_eq!(config, Config::default());
 }
@@ -44,7 +44,7 @@ network:
 registries:
   current: prod
 "#;
-    let config = Config::from_str(yaml).unwrap();
+    let config = Config::from_yaml_str(yaml).unwrap();
 
     // Check specified values
     assert_eq!(config.output.format, OutputFormat::Json);
@@ -86,7 +86,7 @@ registries:
     - name: prod
       url: "https://registry.example.com"
 "#;
-    let config = Config::from_str(yaml).unwrap();
+    let config = Config::from_yaml_str(yaml).unwrap();
 
     assert_eq!(config.output.format, OutputFormat::Yaml);
     assert_eq!(config.output.color, ColorChoice::Never);
@@ -107,7 +107,7 @@ registries:
 #[test]
 fn test_from_str_invalid_yaml() {
     let yaml = "output: { format: invalid }";
-    let result = Config::from_str(yaml);
+    let result = Config::from_yaml_str(yaml);
     assert!(result.is_err());
 }
 
@@ -115,6 +115,6 @@ fn test_from_str_invalid_yaml() {
 fn test_from_str_unknown_field() {
     // config-rs should ignore unknown fields
     let yaml = "unknown_field: true";
-    let result = Config::from_str(yaml);
+    let result = Config::from_yaml_str(yaml);
     assert!(result.is_ok());
 }

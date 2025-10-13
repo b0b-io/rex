@@ -12,8 +12,7 @@ use std::path::Path;
 mod tests;
 
 /// Root configuration structure.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct Config {
     #[serde(default)]
     pub output: Output,
@@ -27,12 +26,11 @@ pub struct Config {
     pub registries: Registries,
 }
 
-
 impl Config {
     /// Parses a `Config` from a YAML string.
     ///
     /// This function is primarily used for testing.
-    pub fn from_str(s: &str) -> Result<Self> {
+    pub fn from_yaml_str(s: &str) -> Result<Self> {
         let builder = ConfigRs::builder()
             // Add default values
             .add_source(ConfigRs::try_from(&Config::default())?)
@@ -66,14 +64,17 @@ impl Config {
             .build()
             .and_then(|cfg| cfg.try_deserialize())
             .map_err(|e| {
-                RexError::config_with_source("Failed to deserialize configuration", None, e)
+                RexError::config_with_source(
+                    "Failed to deserialize configuration",
+                    None::<String>,
+                    e,
+                )
             })
     }
 }
 
 /// Output formatting settings.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct Output {
     #[serde(default)]
     pub format: OutputFormat,
@@ -82,12 +83,9 @@ pub struct Output {
     pub color: ColorChoice,
 }
 
-
 /// Enum for output formats.
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-
 pub enum OutputFormat {
     Pretty,
 
@@ -103,10 +101,8 @@ impl Default for OutputFormat {
 }
 
 /// Enum for color output choices.
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-
 pub enum ColorChoice {
     Auto,
 
@@ -175,7 +171,7 @@ fn default_cache_enabled() -> bool {
 
 /// Cache time-to-live (TTL) settings in seconds.
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 
 pub struct CacheTtl {
     #[serde(default = "default_cache_ttl_catalog")]
@@ -223,7 +219,7 @@ fn default_cache_ttl_config() -> u64 {
 
 /// Cache size limits.
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 
 pub struct CacheLimits {
     #[serde(default = "default_cache_limits_memory_entries")]
@@ -283,9 +279,7 @@ fn default_tui_vim_bindings() -> bool {
 
 /// Registry management settings.
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-
-#[derive(Default)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct Registries {
     #[serde(default)]
     pub current: Option<String>,
@@ -293,7 +287,6 @@ pub struct Registries {
     #[serde(default)]
     pub list: Vec<Registry>,
 }
-
 
 /// Configuration for a single registry.
 
