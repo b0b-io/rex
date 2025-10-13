@@ -254,3 +254,10 @@ impl RexError {
         }
     }
 }
+
+// Implement From<config::ConfigError> for RexError
+impl From<config::ConfigError> for RexError {
+    fn from(err: config::ConfigError) -> Self {
+        Self::config_with_source("Configuration error", None, err)
+    }
+}

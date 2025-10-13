@@ -1,5 +1,4 @@
 use super::*;
-use config::File;
 
 #[test]
 fn test_default_config() {
