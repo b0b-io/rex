@@ -242,9 +242,10 @@ impl RexError {
     /// let err = RexError::config_with_source("failed to read config", Some("/path/to/config.toml"), io_err);
     /// assert!(matches!(err, RexError::Config { .. }));
     /// ```
-    pub fn config_with_source<S, E>(message: S, path: Option<S>, source: E) -> Self
+    pub fn config_with_source<S, P, E>(message: S, path: Option<P>, source: E) -> Self
     where
         S: Into<String>,
+        P: Into<String>,
         E: std::error::Error + Send + Sync + 'static,
     {
         Self::Config {
@@ -252,5 +253,12 @@ impl RexError {
             path: path.map(|p| p.into()),
             source: Some(Box::new(source)),
         }
+    }
+}
+
+// Implement From<config::ConfigError> for RexError
+impl From<config::ConfigError> for RexError {
+    fn from(err: config::ConfigError) -> Self {
+        Self::config_with_source("Configuration error", None::<String>, err)
     }
 }

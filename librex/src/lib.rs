@@ -9,7 +9,9 @@
 // error → digest, reference, format → oci → client, auth → config, cache, registry → search
 
 pub mod auth;
+pub mod cache;
 pub mod client;
+pub mod config;
 pub mod digest;
 pub mod error;
 pub mod format;
