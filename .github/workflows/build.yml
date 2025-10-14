@@ -46,31 +46,13 @@ jobs:
       - name: Install Just
         uses: extractions/setup-just@v2
 
-      - name: Cache cross-compilation tools (Linux ARM64)
+      - name: Cache APT packages
         if: matrix.target == 'aarch64-unknown-linux-gnu'
-        id: cache-arm64-tools
-        uses: actions/cache@v4
+        id: cache-apt
+        uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          path: /usr/lib/gcc/aarch64-linux-gnu
-          key: ${{ runner.os }}-aarch64-tools-gcc
-
-      - name: Cache apt lists
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        id: cache-apt-lists
-        uses: actions/cache@v4
-        with:
-          path: /var/lib/apt/lists
-          key: ${{ runner.os }}-apt-lists-${{ hashFiles('**/build.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-apt-lists-
-
-      - name: Install cross-compilation tools (Linux ARM64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu' && steps.cache-arm64-tools.outputs.cache-hit != 'true'
-        run: |
-          if [ "${{ steps.cache-apt-lists.outputs.cache-hit }}" != 'true' ]; then
-            sudo apt-get update
-          fi
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          packages: gcc-aarch64-linux-gnu
+          version: 1.0
 
       - name: Configure cross-compilation linker (Linux ARM64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
