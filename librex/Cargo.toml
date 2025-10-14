@@ -16,9 +16,10 @@ lru = "0.12"
 oci-spec = "0.8.3"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 sha2 = "0.10"
 thiserror = "1.0"
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 walkdir = "2"
 
 [dev-dependencies]
