@@ -18,3 +18,4 @@ pub mod format;
 pub mod oci;
 pub mod reference;
 pub mod registry;
+pub mod search;
