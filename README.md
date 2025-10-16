@@ -147,6 +147,7 @@ We follow conventional commits:
 - [Requirements](docs/req.md) - Detailed MVP requirements and scope
 - [Design](docs/design.md) - Architecture, module design, and CLI interface
 - [Development](docs/development.md) - Development guidelines and practices
+- [Public API](librex/API.md) - High-level library API documentation
 
 ## License
 
