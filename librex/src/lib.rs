@@ -59,6 +59,20 @@
 
 #![warn(clippy::all)]
 
+/// Returns the librex crate version.
+///
+/// This is useful for version reporting in CLI tools and debugging.
+///
+/// # Examples
+///
+/// ```
+/// let version = librex::version();
+/// assert!(!version.is_empty());
+/// ```
+pub fn version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
 // High-level public API (main entry point)
 mod rex;
 pub use rex::{Rex, RexBuilder};
