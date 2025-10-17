@@ -84,3 +84,49 @@ fn test_tags_response_serde() {
 
 // Integration tests would require a mock registry server or test containers
 // These are unit tests for the data structures and basic functionality
+
+#[test]
+fn test_manifest_or_index_types_work_with_registry() {
+    // This test verifies that the ManifestOrIndex type is properly integrated
+    // It doesn't test the actual HTTP calls, just that the types work together
+    use crate::oci::ManifestOrIndex;
+
+    // Sample manifest JSON
+    let manifest_json = r#"{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "config": {
+            "mediaType": "application/vnd.oci.image.config.v1+json",
+            "size": 1234,
+            "digest": "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        },
+        "layers": []
+    }"#;
+
+    let manifest_or_index = ManifestOrIndex::from_bytes(manifest_json.as_bytes()).unwrap();
+    assert!(manifest_or_index.is_manifest());
+    assert!(manifest_or_index.as_manifest().is_some());
+
+    // Sample index JSON
+    let index_json = r#"{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.oci.image.index.v1+json",
+        "manifests": [
+            {
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "size": 1234,
+                "digest": "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                "platform": {
+                    "architecture": "amd64",
+                    "os": "linux"
+                }
+            }
+        ]
+    }"#;
+
+    let manifest_or_index = ManifestOrIndex::from_bytes(index_json.as_bytes()).unwrap();
+    assert!(manifest_or_index.is_index());
+    assert!(manifest_or_index.as_index().is_some());
+    let platforms = manifest_or_index.platforms();
+    assert_eq!(platforms.len(), 1);
+}

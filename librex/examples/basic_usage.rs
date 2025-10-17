@@ -54,6 +54,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             println!("  ... and {} more", tags.len() - 5);
                         }
                         println!();
+
+                        // Check if first image is multi-arch
+                        if let Some(first_tag) = tags.first() {
+                            let image_ref = format!("{}:{}", first_repo, first_tag);
+                            println!("Checking platforms for '{}'...", image_ref);
+                            match rex.list_platforms(&image_ref).await {
+                                Ok(platforms) if !platforms.is_empty() => {
+                                    println!(
+                                        "✓ Multi-platform image with {} platforms:\n",
+                                        platforms.len()
+                                    );
+                                    for (os, arch, variant) in platforms {
+                                        match variant {
+                                            Some(v) => println!("  - {}/{}/{}", os, arch, v),
+                                            None => println!("  - {}/{}", os, arch),
+                                        }
+                                    }
+                                    println!();
+                                }
+                                Ok(_) => println!("  Single-platform image\n"),
+                                Err(e) => println!("✗ Failed to check platforms: {}\n", e),
+                            }
+                        }
                     }
                     Err(e) => println!("✗ Failed to fetch tags: {}\n", e),
                 }

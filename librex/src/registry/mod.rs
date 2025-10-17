@@ -9,7 +9,8 @@ use crate::auth::Credentials;
 use crate::cache::{Cache, CacheType};
 use crate::client::Client;
 use crate::digest::Digest;
-use crate::error::{Result, RexError};
+use crate::error::Result;
+use crate::oci::ManifestOrIndex;
 use crate::reference::Reference;
 use oci_spec::image::ImageManifest;
 use serde::{Deserialize, Serialize};
@@ -171,7 +172,10 @@ impl Registry {
         Ok(tags)
     }
 
-    /// Retrieves a manifest for a specific image reference.
+    /// Retrieves a manifest or index for a specific image reference.
+    ///
+    /// This method automatically detects whether the image is a single-platform
+    /// manifest or a multi-platform index and returns the appropriate type.
     ///
     /// # Arguments
     ///
@@ -179,7 +183,9 @@ impl Registry {
     ///
     /// # Returns
     ///
-    /// The image manifest containing configuration and layer information.
+    /// A `ManifestOrIndex` enum containing either:
+    /// - `Manifest` for single-platform images
+    /// - `Index` for multi-platform images
     ///
     /// # Examples
     ///
@@ -194,12 +200,19 @@ impl Registry {
     /// let mut registry = Registry::new(client, None, None);
     /// let reference = Reference::from_str("alpine:latest")?;
     ///
-    /// let manifest = registry.get_manifest(&reference).await?;
-    /// println!("Layers: {}", manifest.layers().len());
+    /// let manifest_or_index = registry.get_manifest(&reference).await?;
+    /// match manifest_or_index {
+    ///     librex::ManifestOrIndex::Manifest(manifest) => {
+    ///         println!("Single-platform image with {} layers", manifest.layers().len());
+    ///     }
+    ///     librex::ManifestOrIndex::Index(index) => {
+    ///         println!("Multi-platform image with {} platforms", index.manifests().len());
+    ///     }
+    /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn get_manifest(&mut self, reference: &Reference) -> Result<ImageManifest> {
+    pub async fn get_manifest(&mut self, reference: &Reference) -> Result<ManifestOrIndex> {
         // For digest references, we can cache by digest
         let cache_key = if let Some(digest) = reference.digest() {
             format!("{}/manifests/{}", reference.repository(), digest)
@@ -212,14 +225,19 @@ impl Registry {
             )
         };
 
-        // Try cache first
+        // Try cache first - we need to try both manifest and index types
         // Note: Both digest and tag references are cached, but with different TTLs
         // - Digest-based: Long TTL (immutable content)
         // - Tag-based: Shorter TTL via CacheType::Manifest (content can change)
-        if let Some(cache) = &mut self.cache
-            && let Some(cached) = cache.get::<ImageManifest>(&cache_key)?
-        {
-            return Ok(cached);
+        if let Some(cache) = &mut self.cache {
+            // Try as ImageManifest first
+            if let Some(cached) = cache.get::<ImageManifest>(&cache_key)? {
+                return Ok(ManifestOrIndex::Manifest(cached));
+            }
+            // Try as ImageIndex
+            if let Some(cached) = cache.get::<oci_spec::image::ImageIndex>(&cache_key)? {
+                return Ok(ManifestOrIndex::Index(cached));
+            }
         }
 
         // Fetch from registry - client returns (Vec<u8>, String) tuple
@@ -234,16 +252,22 @@ impl Registry {
             .fetch_manifest(reference.repository(), reference_str)
             .await?;
 
-        // Parse the manifest JSON
-        let manifest: ImageManifest = serde_json::from_slice(&manifest_bytes)
-            .map_err(|e| RexError::validation_with_source("Failed to parse manifest JSON", e))?;
+        // Parse the manifest or index
+        let manifest_or_index = ManifestOrIndex::from_bytes(&manifest_bytes)?;
 
         // Cache the result (with appropriate TTL based on reference type)
         if let Some(cache) = &mut self.cache {
-            cache.set(&cache_key, &manifest, CacheType::Manifest)?;
+            match &manifest_or_index {
+                ManifestOrIndex::Manifest(m) => {
+                    cache.set(&cache_key, m, CacheType::Manifest)?;
+                }
+                ManifestOrIndex::Index(i) => {
+                    cache.set(&cache_key, i, CacheType::Manifest)?;
+                }
+            }
         }
 
-        Ok(manifest)
+        Ok(manifest_or_index)
     }
 
     /// Retrieves a blob (layer or config) by digest.

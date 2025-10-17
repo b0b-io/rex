@@ -68,6 +68,7 @@ pub use auth::Credentials;
 pub use config::Config;
 pub use digest::Digest;
 pub use error::{Result, RexError};
+pub use oci::ManifestOrIndex;
 pub use reference::Reference;
 pub use search::SearchResult;
 
