@@ -43,7 +43,8 @@ The primary entry point for all registry operations.
 - `logout()` - Clear credentials
 - `list_repositories()` - List all repositories
 - `list_tags(repository)` - List tags for a repository
-- `get_manifest(image)` - Get manifest for an image
+- `get_manifest(image)` - Get manifest or index for an image (returns `ManifestOrIndex`)
+- `list_platforms(image)` - List available platforms for a multi-platform image
 - `get_blob(repository, digest)` - Get a blob by digest
 - `search_repositories(query)` - Fuzzy search repositories
 - `search_tags(repository, query)` - Fuzzy search tags
@@ -107,6 +108,25 @@ Content digest validation and handling.
 - `algorithm()` - Get the algorithm (sha256, sha512)
 - `encoded()` - Get the hex-encoded hash
 - `verify(data)` - Verify data matches digest
+
+### `ManifestOrIndex`
+
+Represents either a single-platform manifest or a multi-platform image index.
+
+**Variants:**
+- `Manifest(ImageManifest)` - Single-platform image
+- `Index(ImageIndex)` - Multi-platform image
+
+**Methods:**
+- `from_bytes(bytes)` - Parse from JSON bytes, auto-detecting type
+- `is_manifest()` - Check if this is a manifest
+- `is_index()` - Check if this is an index
+- `as_manifest()` - Get manifest reference (if manifest)
+- `as_index()` - Get index reference (if index)
+- `into_manifest()` - Consume and get manifest (if manifest)
+- `into_index()` - Consume and get index (if index)
+- `platforms()` - Get list of (Platform, Descriptor) tuples
+- `find_platform(os, arch)` - Find descriptor for specific platform
 
 ### `Config`
 
@@ -173,11 +193,45 @@ let results = rex.search_images("alp:lat").await?;
 ### Getting Manifests
 
 ```rust
-let manifest = rex.get_manifest("alpine:latest").await?;
-println!("Layers: {}", manifest.layers().len());
+use librex::ManifestOrIndex;
+
+// Get manifest or index (auto-detects type)
+let manifest_or_index = rex.get_manifest("alpine:latest").await?;
+
+match manifest_or_index {
+    ManifestOrIndex::Manifest(manifest) => {
+        println!("Single-platform image with {} layers", manifest.layers().len());
+    }
+    ManifestOrIndex::Index(index) => {
+        println!("Multi-platform image with {} platforms", index.manifests().len());
+        for descriptor in index.manifests() {
+            if let Some(platform) = descriptor.platform() {
+                println!("  - {}/{}", platform.os(), platform.architecture());
+            }
+        }
+    }
+}
+
+// Or use helper methods to check
+if let Some(manifest) = manifest_or_index.as_manifest() {
+    println!("Layers: {}", manifest.layers().len());
+}
 
 // Can also use digest references
-let manifest = rex.get_manifest("alpine@sha256:abc123...").await?;
+let manifest_or_index = rex.get_manifest("alpine@sha256:abc123...").await?;
+```
+
+### Listing Platforms
+
+```rust
+// List all available platforms for a multi-platform image
+let platforms = rex.list_platforms("alpine:latest").await?;
+for (os, arch, variant) in platforms {
+    match variant {
+        Some(v) => println!("{}/{}/{}", os, arch, v),
+        None => println!("{}/{}", os, arch),
+    }
+}
 ```
 
 ## Low-Level Modules

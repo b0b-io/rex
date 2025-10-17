@@ -41,10 +41,10 @@ use crate::client::Client;
 use crate::config::Config;
 use crate::digest::Digest;
 use crate::error::Result;
+use crate::oci::ManifestOrIndex;
 use crate::reference::Reference;
 use crate::registry::Registry;
 use crate::search::{SearchResult, search_images, search_repositories, search_tags};
-use oci_spec::image::ImageManifest;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
@@ -312,7 +312,14 @@ impl Rex {
         Ok(tags)
     }
 
-    /// Get the manifest for a specific image.
+    /// Get the manifest or index for a specific image.
+    ///
+    /// This method automatically detects whether the image is a single-platform
+    /// manifest or a multi-platform index and returns the appropriate type.
+    ///
+    /// For single-platform images, you can extract the manifest using `.as_manifest()`
+    /// or `.into_manifest()`. For multi-platform images, use `.as_index()` or
+    /// `.into_index()` to access the platform list.
     ///
     /// # Arguments
     ///
@@ -320,7 +327,54 @@ impl Rex {
     ///
     /// # Returns
     ///
-    /// The image manifest containing layer and configuration information.
+    /// A `ManifestOrIndex` enum containing either a single-platform manifest
+    /// or a multi-platform index.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use librex::{Rex, ManifestOrIndex};
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
+    ///
+    ///     let manifest_or_index = rex.get_manifest("alpine:latest").await?;
+    ///     match manifest_or_index {
+    ///         ManifestOrIndex::Manifest(manifest) => {
+    ///             println!("Single-platform: {} layers", manifest.layers().len());
+    ///         }
+    ///         ManifestOrIndex::Index(index) => {
+    ///             println!("Multi-platform: {} platforms", index.manifests().len());
+    ///         }
+    ///     }
+    ///
+    ///     // Or use helper methods:
+    ///     let manifest_or_index = rex.get_manifest("alpine:latest").await?;
+    ///     if let Some(manifest) = manifest_or_index.as_manifest() {
+    ///         println!("Layers: {}", manifest.layers().len());
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn get_manifest(&mut self, image: &str) -> Result<ManifestOrIndex> {
+        let reference = image.parse::<Reference>()?;
+        self.registry.get_manifest(&reference).await
+    }
+
+    /// List available platforms for a multi-platform image.
+    ///
+    /// This method fetches the manifest/index and returns the available platforms.
+    /// If the image is a single-platform manifest, an empty vector is returned.
+    ///
+    /// # Arguments
+    ///
+    /// * `image` - The image reference (e.g., "alpine:latest")
+    ///
+    /// # Returns
+    ///
+    /// A vector of tuples containing (os, architecture, variant) for each platform.
     ///
     /// # Examples
     ///
@@ -331,15 +385,34 @@ impl Rex {
     /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ///     let mut rex = Rex::connect("http://localhost:5000").await?;
     ///
-    ///     let manifest = rex.get_manifest("alpine:latest").await?;
-    ///     println!("Layers: {}", manifest.layers().len());
+    ///     let platforms = rex.list_platforms("alpine:latest").await?;
+    ///     for (os, arch, variant) in platforms {
+    ///         match variant {
+    ///             Some(v) => println!("{}/{}/{}", os, arch, v),
+    ///             None => println!("{}/{}", os, arch),
+    ///         }
+    ///     }
     ///
     ///     Ok(())
     /// }
     /// ```
-    pub async fn get_manifest(&mut self, image: &str) -> Result<ImageManifest> {
-        let reference = image.parse::<Reference>()?;
-        self.registry.get_manifest(&reference).await
+    pub async fn list_platforms(
+        &mut self,
+        image: &str,
+    ) -> Result<Vec<(String, String, Option<String>)>> {
+        let manifest_or_index = self.get_manifest(image).await?;
+        let platforms = manifest_or_index.platforms();
+
+        Ok(platforms
+            .into_iter()
+            .map(|(platform, _)| {
+                (
+                    platform.os().to_string(),
+                    platform.architecture().to_string(),
+                    platform.variant().as_ref().map(|s| s.to_string()),
+                )
+            })
+            .collect())
     }
 
     /// Get a blob (layer or config) by digest.
