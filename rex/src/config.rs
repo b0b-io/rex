@@ -11,6 +11,9 @@ pub struct Config {
     /// Style configuration
     #[serde(default)]
     pub style: StyleConfig,
+    /// Registry configuration
+    #[serde(default)]
+    pub registries: RegistriesConfig,
 }
 
 /// Style configuration section
@@ -41,6 +44,25 @@ impl Default for StyleConfig {
     }
 }
 
+/// Registries configuration section
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RegistriesConfig {
+    /// Default registry name
+    pub default: Option<String>,
+    /// List of configured registries
+    #[serde(default)]
+    pub list: Vec<RegistryEntry>,
+}
+
+/// A single registry entry
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RegistryEntry {
+    /// Registry name
+    pub name: String,
+    /// Registry URL
+    pub url: String,
+}
+
 impl Config {
     /// Load configuration from a file
     pub fn load(path: &PathBuf) -> Result<Self, String> {
@@ -69,15 +91,33 @@ impl Config {
 
 impl Formattable for Config {
     fn format_pretty(&self) -> String {
-        format!(
-            "[style]\nformat = \"{}\"\ncolor = {}",
+        let mut output = format!(
+            "[style]\nformat = \"{}\"\ncolor = {}\n",
             match self.style.format {
                 OutputFormat::Pretty => "pretty",
                 OutputFormat::Json => "json",
                 OutputFormat::Yaml => "yaml",
             },
             self.style.color
-        )
+        );
+
+        // Add registries section
+        output.push_str("\n[registries]\n");
+        if let Some(ref default) = self.registries.default {
+            output.push_str(&format!("default = \"{}\"\n", default));
+        }
+
+        if !self.registries.list.is_empty() {
+            output.push('\n');
+            for registry in &self.registries.list {
+                output.push_str(&format!(
+                    "[[registries.list]]\nname = \"{}\"\nurl = \"{}\"\n\n",
+                    registry.name, registry.url
+                ));
+            }
+        }
+
+        output
     }
 }
 

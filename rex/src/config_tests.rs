@@ -198,3 +198,98 @@ fn test_display_config() {
     let result = display_config(&config_path);
     assert!(result.is_ok());
 }
+
+#[test]
+fn test_registries_config_default() {
+    let registries = RegistriesConfig::default();
+    assert!(registries.default.is_none());
+    assert!(registries.list.is_empty());
+}
+
+#[test]
+fn test_registry_entry_creation() {
+    let entry = RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    };
+    assert_eq!(entry.name, "local");
+    assert_eq!(entry.url, "http://localhost:5000");
+}
+
+#[test]
+fn test_config_with_registries_serialization() {
+    let mut config = Config::default();
+    config.registries.default = Some("dockerhub".to_string());
+    config.registries.list.push(RegistryEntry {
+        name: "dockerhub".to_string(),
+        url: "https://registry-1.docker.io".to_string(),
+    });
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+
+    let toml_str = toml::to_string(&config).unwrap();
+    assert!(toml_str.contains("[registries]"));
+    assert!(toml_str.contains("default = \"dockerhub\""));
+    assert!(toml_str.contains("[[registries.list]]"));
+    assert!(toml_str.contains("name = \"dockerhub\""));
+    assert!(toml_str.contains("name = \"local\""));
+}
+
+#[test]
+fn test_config_with_registries_deserialization() {
+    let toml_str = r#"
+[style]
+format = "pretty"
+color = true
+
+[registries]
+default = "dockerhub"
+
+[[registries.list]]
+name = "dockerhub"
+url = "https://registry-1.docker.io"
+
+[[registries.list]]
+name = "local"
+url = "http://localhost:5000"
+"#;
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.registries.default, Some("dockerhub".to_string()));
+    assert_eq!(config.registries.list.len(), 2);
+    assert_eq!(config.registries.list[0].name, "dockerhub");
+    assert_eq!(config.registries.list[1].name, "local");
+}
+
+#[test]
+fn test_config_with_empty_registries() {
+    let config = Config::default();
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+    config.save(&config_path).unwrap();
+
+    let loaded = Config::load(&config_path).unwrap();
+    assert!(loaded.registries.default.is_none());
+    assert!(loaded.registries.list.is_empty());
+}
+
+#[test]
+fn test_registry_entry_equality() {
+    let entry1 = RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    };
+    let entry2 = RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    };
+    let entry3 = RegistryEntry {
+        name: "remote".to_string(),
+        url: "http://example.com".to_string(),
+    };
+
+    assert_eq!(entry1, entry2);
+    assert_ne!(entry1, entry3);
+}
