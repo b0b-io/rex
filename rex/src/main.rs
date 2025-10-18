@@ -67,6 +67,12 @@ enum RegistryCommands {
         /// Registry URL
         url: String,
     },
+    /// List all registries
+    List {
+        /// Output format: pretty, json, yaml
+        #[arg(short, long, default_value = "pretty")]
+        format: String,
+    },
 }
 
 fn main() {
@@ -92,6 +98,10 @@ fn main() {
         Commands::Registry { command } => match command {
             RegistryCommands::Add { name, url } => {
                 config::handle_registry_add(&name, &url);
+            }
+            RegistryCommands::List { format } => {
+                let fmt = output::OutputFormat::from(format.as_str());
+                config::handle_registry_list(fmt);
             }
         },
     }

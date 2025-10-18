@@ -4,6 +4,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use tabled::Tabled;
 
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -55,12 +56,31 @@ pub struct RegistriesConfig {
 }
 
 /// A single registry entry
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Tabled)]
 pub struct RegistryEntry {
     /// Registry name
+    #[tabled(rename = "NAME")]
     pub name: String,
     /// Registry URL
+    #[tabled(rename = "URL")]
     pub url: String,
+}
+
+/// Registry entry with default marker for display purposes
+#[derive(Tabled, Serialize)]
+pub struct RegistryDisplay {
+    #[tabled(rename = "NAME")]
+    pub name: String,
+    #[tabled(rename = "URL")]
+    pub url: String,
+    #[tabled(rename = "DEFAULT")]
+    pub default: String,
+}
+
+impl Formattable for RegistryEntry {
+    fn format_pretty(&self) -> String {
+        format!("{:20} {}", self.name, self.url)
+    }
 }
 
 impl Config {
@@ -347,11 +367,76 @@ pub fn handle_set(key: Option<&str>, value: Option<&str>) {
     }
 }
 
+/// List all registries
+pub fn list_registries(config_path: &PathBuf) -> Result<Vec<RegistryDisplay>, String> {
+    let config = Config::load(config_path)?;
+
+    // Create display list with default markers
+    let registries: Vec<RegistryDisplay> = config
+        .registries
+        .list
+        .iter()
+        .map(|r| {
+            let is_default = config.registries.default.as_ref() == Some(&r.name);
+            RegistryDisplay {
+                name: r.name.clone(),
+                url: r.url.clone(),
+                default: if is_default {
+                    "*".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        })
+        .collect();
+
+    Ok(registries)
+}
+
 /// Handle the registry add subcommand
 pub fn handle_registry_add(name: &str, url: &str) {
     let config_path = get_config_path();
     match add_registry(&config_path, name, url) {
         Ok(_) => println!("Added registry '{}' at {}", name, url),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Handle the registry list subcommand
+pub fn handle_registry_list(format: OutputFormat) {
+    let config_path = get_config_path();
+    match list_registries(&config_path) {
+        Ok(registries) => {
+            if registries.is_empty() {
+                println!("No registries configured.");
+                return;
+            }
+
+            match format {
+                OutputFormat::Pretty => {
+                    use tabled::Table;
+                    let table = Table::new(&registries).to_string();
+                    println!("{}", table);
+                }
+                OutputFormat::Json => match serde_json::to_string_pretty(&registries) {
+                    Ok(json) => println!("{}", json),
+                    Err(e) => {
+                        eprintln!("Error formatting JSON: {}", e);
+                        std::process::exit(1);
+                    }
+                },
+                OutputFormat::Yaml => match serde_yaml::to_string(&registries) {
+                    Ok(yaml) => print!("{}", yaml),
+                    Err(e) => {
+                        eprintln!("Error formatting YAML: {}", e);
+                        std::process::exit(1);
+                    }
+                },
+            }
+        }
         Err(e) => {
             eprintln!("Error: {}", e);
             std::process::exit(1);

@@ -413,3 +413,49 @@ fn test_add_second_registry_does_not_change_default() {
     // Should still be "first"
     assert_eq!(loaded.registries.default, Some("first".to_string()));
 }
+
+// Tests for registry list command
+#[test]
+fn test_list_registries_empty() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let config = Config::default();
+    config.save(&config_path).unwrap();
+
+    let result = list_registries(&config_path);
+    assert!(result.is_ok());
+    let registries = result.unwrap();
+    assert!(registries.is_empty());
+}
+
+#[test]
+fn test_list_registries_with_entries() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let mut config = Config::default();
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+    config.registries.list.push(RegistryEntry {
+        name: "dockerhub".to_string(),
+        url: "https://registry-1.docker.io".to_string(),
+    });
+    config.save(&config_path).unwrap();
+
+    let result = list_registries(&config_path);
+    assert!(result.is_ok());
+    let registries = result.unwrap();
+    assert_eq!(registries.len(), 2);
+    assert_eq!(registries[0].name, "local");
+    assert_eq!(registries[1].name, "dockerhub");
+}
+
+#[test]
+fn test_list_registries_nonexistent_config() {
+    let config_path = std::path::PathBuf::from("/tmp/nonexistent_registry_config.toml");
+    let result = list_registries(&config_path);
+    assert!(result.is_err());
+}
