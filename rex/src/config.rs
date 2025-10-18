@@ -4,6 +4,8 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use tabled::Tabled;
+use url::Url;
 
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -55,12 +57,31 @@ pub struct RegistriesConfig {
 }
 
 /// A single registry entry
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Tabled)]
 pub struct RegistryEntry {
     /// Registry name
+    #[tabled(rename = "NAME")]
     pub name: String,
     /// Registry URL
+    #[tabled(rename = "URL")]
     pub url: String,
+}
+
+/// Registry entry with default marker for display purposes
+#[derive(Tabled, Serialize)]
+pub struct RegistryDisplay {
+    #[tabled(rename = "NAME")]
+    pub name: String,
+    #[tabled(rename = "URL")]
+    pub url: String,
+    #[tabled(rename = "DEFAULT")]
+    pub default: String,
+}
+
+impl Formattable for RegistryEntry {
+    fn format_pretty(&self) -> String {
+        format!("{:20} {}", self.name, self.url)
+    }
 }
 
 impl Config {
@@ -227,6 +248,60 @@ pub fn display_config(config_path: &PathBuf) -> Result<Config, String> {
     Config::load(config_path)
 }
 
+/// Validate and normalize a registry URL
+///
+/// This function validates that the URL is well-formed and uses http or https scheme.
+/// If no scheme is provided, it defaults to http://.
+///
+/// # Arguments
+///
+/// * `url_str` - The URL string to validate
+///
+/// # Returns
+///
+/// Returns the normalized URL string on success, or an error message on failure.
+///
+/// # Examples
+///
+/// ```
+/// # use std::path::PathBuf;
+/// # use rex::config::validate_registry_url;
+/// assert!(validate_registry_url("https://registry-1.docker.io").is_ok());
+/// assert!(validate_registry_url("localhost:5000").is_ok());
+/// assert!(validate_registry_url("http:://bad").is_err());
+/// ```
+pub fn validate_registry_url(url_str: &str) -> Result<String, String> {
+    // Try to parse as-is first
+    let url_to_parse = if url_str.contains("://") {
+        url_str.to_string()
+    } else {
+        // Add default http:// scheme if no scheme provided
+        format!("http://{}", url_str)
+    };
+
+    // Parse and validate the URL
+    let parsed_url =
+        Url::parse(&url_to_parse).map_err(|e| format!("Invalid URL '{}': {}", url_str, e))?;
+
+    // Validate that the scheme is http or https
+    match parsed_url.scheme() {
+        "http" | "https" => {}
+        scheme => {
+            return Err(format!(
+                "Invalid URL scheme '{}'. Only 'http' and 'https' are supported.",
+                scheme
+            ));
+        }
+    }
+
+    // Validate that there's a host
+    if parsed_url.host_str().is_none() {
+        return Err(format!("Invalid URL '{}': missing host", url_str));
+    }
+
+    Ok(parsed_url.to_string())
+}
+
 /// Add a new registry to the configuration
 pub fn add_registry(config_path: &PathBuf, name: &str, url: &str) -> Result<(), String> {
     // Load existing config or create default
@@ -241,12 +316,8 @@ pub fn add_registry(config_path: &PathBuf, name: &str, url: &str) -> Result<(), 
         return Err(format!("Registry '{}' already exists", name));
     }
 
-    // Normalize URL (add http:// if no scheme)
-    let normalized_url = if url.starts_with("http://") || url.starts_with("https://") {
-        url.to_string()
-    } else {
-        format!("http://{}", url)
-    };
+    // Validate and normalize URL
+    let normalized_url = validate_registry_url(url)?;
 
     // Add the new registry
     config.registries.list.push(RegistryEntry {
@@ -347,11 +418,76 @@ pub fn handle_set(key: Option<&str>, value: Option<&str>) {
     }
 }
 
+/// List all registries
+pub fn list_registries(config_path: &PathBuf) -> Result<Vec<RegistryDisplay>, String> {
+    let config = Config::load(config_path)?;
+
+    // Create display list with default markers
+    let registries: Vec<RegistryDisplay> = config
+        .registries
+        .list
+        .iter()
+        .map(|r| {
+            let is_default = config.registries.default.as_ref() == Some(&r.name);
+            RegistryDisplay {
+                name: r.name.clone(),
+                url: r.url.clone(),
+                default: if is_default {
+                    "*".to_string()
+                } else {
+                    String::new()
+                },
+            }
+        })
+        .collect();
+
+    Ok(registries)
+}
+
 /// Handle the registry add subcommand
 pub fn handle_registry_add(name: &str, url: &str) {
     let config_path = get_config_path();
     match add_registry(&config_path, name, url) {
         Ok(_) => println!("Added registry '{}' at {}", name, url),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Handle the registry list subcommand
+pub fn handle_registry_list(format: OutputFormat) {
+    let config_path = get_config_path();
+    match list_registries(&config_path) {
+        Ok(registries) => {
+            if registries.is_empty() {
+                println!("No registries configured.");
+                return;
+            }
+
+            match format {
+                OutputFormat::Pretty => {
+                    use tabled::Table;
+                    let table = Table::new(&registries).to_string();
+                    println!("{}", table);
+                }
+                OutputFormat::Json => match serde_json::to_string_pretty(&registries) {
+                    Ok(json) => println!("{}", json),
+                    Err(e) => {
+                        eprintln!("Error formatting JSON: {}", e);
+                        std::process::exit(1);
+                    }
+                },
+                OutputFormat::Yaml => match serde_yaml::to_string(&registries) {
+                    Ok(yaml) => print!("{}", yaml),
+                    Err(e) => {
+                        eprintln!("Error formatting YAML: {}", e);
+                        std::process::exit(1);
+                    }
+                },
+            }
+        }
         Err(e) => {
             eprintln!("Error: {}", e);
             std::process::exit(1);
