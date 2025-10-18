@@ -227,6 +227,44 @@ pub fn display_config(config_path: &PathBuf) -> Result<Config, String> {
     Config::load(config_path)
 }
 
+/// Add a new registry to the configuration
+pub fn add_registry(config_path: &PathBuf, name: &str, url: &str) -> Result<(), String> {
+    // Load existing config or create default
+    let mut config = if config_path.exists() {
+        Config::load(config_path)?
+    } else {
+        Config::default()
+    };
+
+    // Check if registry with this name already exists
+    if config.registries.list.iter().any(|r| r.name == name) {
+        return Err(format!("Registry '{}' already exists", name));
+    }
+
+    // Normalize URL (add http:// if no scheme)
+    let normalized_url = if url.starts_with("http://") || url.starts_with("https://") {
+        url.to_string()
+    } else {
+        format!("http://{}", url)
+    };
+
+    // Add the new registry
+    config.registries.list.push(RegistryEntry {
+        name: name.to_string(),
+        url: normalized_url,
+    });
+
+    // Set as default if this is the first registry
+    if config.registries.list.len() == 1 {
+        config.registries.default = Some(name.to_string());
+    }
+
+    // Save config
+    config.save(config_path)?;
+
+    Ok(())
+}
+
 /// Handle the config init subcommand
 pub fn handle_init() {
     let config_path = get_config_path();
@@ -304,6 +342,18 @@ pub fn handle_set(key: Option<&str>, value: Option<&str>) {
             eprintln!(
                 "Error: Invalid arguments. Use 'rex config set <key> <value>' or 'rex config set' to edit."
             );
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Handle the registry add subcommand
+pub fn handle_registry_add(name: &str, url: &str) {
+    let config_path = get_config_path();
+    match add_registry(&config_path, name, url) {
+        Ok(_) => println!("Added registry '{}' at {}", name, url),
+        Err(e) => {
+            eprintln!("Error: {}", e);
             std::process::exit(1);
         }
     }
