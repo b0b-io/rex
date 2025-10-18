@@ -28,6 +28,11 @@ enum Commands {
         #[command(subcommand)]
         command: ConfigCommands,
     },
+    /// Manage registries
+    Registry {
+        #[command(subcommand)]
+        command: RegistryCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -53,6 +58,17 @@ enum ConfigCommands {
     Edit,
 }
 
+#[derive(Subcommand, Debug)]
+enum RegistryCommands {
+    /// Add a new registry
+    Add {
+        /// Registry name
+        name: String,
+        /// Registry URL
+        url: String,
+    },
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -71,6 +87,11 @@ fn main() {
             }
             ConfigCommands::Edit => {
                 config::handle_set(None, None);
+            }
+        },
+        Commands::Registry { command } => match command {
+            RegistryCommands::Add { name, url } => {
+                config::handle_registry_add(&name, &url);
             }
         },
     }
