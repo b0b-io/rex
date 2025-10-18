@@ -5,6 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use tabled::Tabled;
+use url::Url;
 
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -247,6 +248,60 @@ pub fn display_config(config_path: &PathBuf) -> Result<Config, String> {
     Config::load(config_path)
 }
 
+/// Validate and normalize a registry URL
+///
+/// This function validates that the URL is well-formed and uses http or https scheme.
+/// If no scheme is provided, it defaults to http://.
+///
+/// # Arguments
+///
+/// * `url_str` - The URL string to validate
+///
+/// # Returns
+///
+/// Returns the normalized URL string on success, or an error message on failure.
+///
+/// # Examples
+///
+/// ```
+/// # use std::path::PathBuf;
+/// # use rex::config::validate_registry_url;
+/// assert!(validate_registry_url("https://registry-1.docker.io").is_ok());
+/// assert!(validate_registry_url("localhost:5000").is_ok());
+/// assert!(validate_registry_url("http:://bad").is_err());
+/// ```
+pub fn validate_registry_url(url_str: &str) -> Result<String, String> {
+    // Try to parse as-is first
+    let url_to_parse = if url_str.contains("://") {
+        url_str.to_string()
+    } else {
+        // Add default http:// scheme if no scheme provided
+        format!("http://{}", url_str)
+    };
+
+    // Parse and validate the URL
+    let parsed_url =
+        Url::parse(&url_to_parse).map_err(|e| format!("Invalid URL '{}': {}", url_str, e))?;
+
+    // Validate that the scheme is http or https
+    match parsed_url.scheme() {
+        "http" | "https" => {}
+        scheme => {
+            return Err(format!(
+                "Invalid URL scheme '{}'. Only 'http' and 'https' are supported.",
+                scheme
+            ));
+        }
+    }
+
+    // Validate that there's a host
+    if parsed_url.host_str().is_none() {
+        return Err(format!("Invalid URL '{}': missing host", url_str));
+    }
+
+    Ok(parsed_url.to_string())
+}
+
 /// Add a new registry to the configuration
 pub fn add_registry(config_path: &PathBuf, name: &str, url: &str) -> Result<(), String> {
     // Load existing config or create default
@@ -261,12 +316,8 @@ pub fn add_registry(config_path: &PathBuf, name: &str, url: &str) -> Result<(), 
         return Err(format!("Registry '{}' already exists", name));
     }
 
-    // Normalize URL (add http:// if no scheme)
-    let normalized_url = if url.starts_with("http://") || url.starts_with("https://") {
-        url.to_string()
-    } else {
-        format!("http://{}", url)
-    };
+    // Validate and normalize URL
+    let normalized_url = validate_registry_url(url)?;
 
     // Add the new registry
     config.registries.list.push(RegistryEntry {

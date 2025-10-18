@@ -459,3 +459,98 @@ fn test_list_registries_nonexistent_config() {
     let result = list_registries(&config_path);
     assert!(result.is_err());
 }
+
+// Tests for URL validation
+#[test]
+fn test_validate_registry_url_with_http_scheme() {
+    let result = validate_registry_url("http://localhost:5000");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "http://localhost:5000/");
+}
+
+#[test]
+fn test_validate_registry_url_with_https_scheme() {
+    let result = validate_registry_url("https://registry-1.docker.io");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "https://registry-1.docker.io/");
+}
+
+#[test]
+fn test_validate_registry_url_without_scheme() {
+    let result = validate_registry_url("localhost:5000");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "http://localhost:5000/");
+}
+
+#[test]
+fn test_validate_registry_url_domain_without_port() {
+    let result = validate_registry_url("registry.example.com");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "http://registry.example.com/");
+}
+
+#[test]
+fn test_validate_registry_url_with_path() {
+    let result = validate_registry_url("https://example.com/v2/");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "https://example.com/v2/");
+}
+
+#[test]
+fn test_validate_registry_url_malformed_double_colon() {
+    let result = validate_registry_url("http:://badurl");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Invalid URL"));
+}
+
+#[test]
+fn test_validate_registry_url_invalid_scheme_ftp() {
+    let result = validate_registry_url("ftp://example.com");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Invalid URL scheme 'ftp'"));
+}
+
+#[test]
+fn test_validate_registry_url_invalid_scheme_file() {
+    let result = validate_registry_url("file:///tmp/registry");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Invalid URL scheme 'file'"));
+}
+
+#[test]
+fn test_validate_registry_url_empty_string() {
+    let result = validate_registry_url("");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Invalid URL"));
+}
+
+#[test]
+fn test_validate_registry_url_only_scheme() {
+    let result = validate_registry_url("http://");
+    assert!(result.is_err());
+    // The url crate parses "http://" successfully with an empty host
+    // So we just check that it's an error
+    let err = result.unwrap_err();
+    assert!(err.contains("Invalid URL") || err.contains("missing host"));
+}
+
+#[test]
+fn test_validate_registry_url_spaces() {
+    let result = validate_registry_url("http://bad url.com");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("Invalid URL"));
+}
+
+#[test]
+fn test_validate_registry_url_ipv4_address() {
+    let result = validate_registry_url("192.168.1.100:5000");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "http://192.168.1.100:5000/");
+}
+
+#[test]
+fn test_validate_registry_url_ipv6_address() {
+    let result = validate_registry_url("http://[::1]:5000");
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "http://[::1]:5000/");
+}
