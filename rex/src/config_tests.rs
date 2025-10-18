@@ -309,7 +309,7 @@ fn test_add_registry_to_empty_config() {
     let loaded = Config::load(&config_path).unwrap();
     assert_eq!(loaded.registries.list.len(), 1);
     assert_eq!(loaded.registries.list[0].name, "local");
-    assert_eq!(loaded.registries.list[0].url, "http://localhost:5000");
+    assert_eq!(loaded.registries.list[0].url, "http://localhost:5000/");
 }
 
 #[test]

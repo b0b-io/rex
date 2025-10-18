@@ -68,6 +68,7 @@ enum RegistryCommands {
         url: String,
     },
     /// List all registries
+    #[command(alias = "ls")]
     List {
         /// Output format: pretty, json, yaml
         #[arg(short, long, default_value = "pretty")]
