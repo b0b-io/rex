@@ -363,6 +363,25 @@ pub fn remove_registry(config_path: &PathBuf, name: &str) -> Result<(), String> 
     Ok(())
 }
 
+/// Set the default registry
+pub fn set_default_registry(config_path: &PathBuf, name: &str) -> Result<(), String> {
+    // Load existing config
+    let mut config = Config::load(config_path)?;
+
+    // Check if registry exists
+    if !config.registries.list.iter().any(|r| r.name == name) {
+        return Err(format!("Registry '{}' not found", name));
+    }
+
+    // Set as default
+    config.registries.default = Some(name.to_string());
+
+    // Save config
+    config.save(config_path)?;
+
+    Ok(())
+}
+
 /// Handle the config init subcommand
 pub fn handle_init() {
     let config_path = get_config_path();
@@ -488,6 +507,18 @@ pub fn handle_registry_remove(name: &str) {
     let config_path = get_config_path();
     match remove_registry(&config_path, name) {
         Ok(_) => println!("Removed registry '{}'", name),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Handle the registry set-default subcommand
+pub fn handle_registry_set_default(name: &str) {
+    let config_path = get_config_path();
+    match set_default_registry(&config_path, name) {
+        Ok(_) => println!("Set '{}' as default registry", name),
         Err(e) => {
             eprintln!("Error: {}", e);
             std::process::exit(1);

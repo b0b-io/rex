@@ -655,3 +655,77 @@ fn test_remove_registry_empty_config() {
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("not found"));
 }
+
+// Tests for registry set-default command
+#[test]
+fn test_set_default_registry_existing() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let mut config = Config::default();
+    config.registries.default = Some("dockerhub".to_string());
+    config.registries.list.push(RegistryEntry {
+        name: "dockerhub".to_string(),
+        url: "https://registry-1.docker.io".to_string(),
+    });
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+    config.save(&config_path).unwrap();
+
+    let result = set_default_registry(&config_path, "local");
+    assert!(result.is_ok());
+
+    let loaded = Config::load(&config_path).unwrap();
+    assert_eq!(loaded.registries.default, Some("local".to_string()));
+}
+
+#[test]
+fn test_set_default_registry_nonexistent() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let mut config = Config::default();
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+    config.save(&config_path).unwrap();
+
+    let result = set_default_registry(&config_path, "nonexistent");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("not found"));
+}
+
+#[test]
+fn test_set_default_registry_when_none_set() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let mut config = Config::default();
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+    config.save(&config_path).unwrap();
+
+    let result = set_default_registry(&config_path, "local");
+    assert!(result.is_ok());
+
+    let loaded = Config::load(&config_path).unwrap();
+    assert_eq!(loaded.registries.default, Some("local".to_string()));
+}
+
+#[test]
+fn test_set_default_registry_empty_config() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let config = Config::default();
+    config.save(&config_path).unwrap();
+
+    let result = set_default_registry(&config_path, "local");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("not found"));
+}
