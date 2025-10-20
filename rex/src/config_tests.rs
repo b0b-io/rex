@@ -554,3 +554,104 @@ fn test_validate_registry_url_ipv6_address() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), "http://[::1]:5000/");
 }
+
+// Tests for registry remove command
+#[test]
+fn test_remove_registry_existing() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let mut config = Config::default();
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+    config.registries.list.push(RegistryEntry {
+        name: "dockerhub".to_string(),
+        url: "https://registry-1.docker.io".to_string(),
+    });
+    config.save(&config_path).unwrap();
+
+    let result = remove_registry(&config_path, "local");
+    assert!(result.is_ok());
+
+    let loaded = Config::load(&config_path).unwrap();
+    assert_eq!(loaded.registries.list.len(), 1);
+    assert_eq!(loaded.registries.list[0].name, "dockerhub");
+}
+
+#[test]
+fn test_remove_registry_nonexistent() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let mut config = Config::default();
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+    config.save(&config_path).unwrap();
+
+    let result = remove_registry(&config_path, "nonexistent");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("not found"));
+}
+
+#[test]
+fn test_remove_last_registry() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let mut config = Config::default();
+    config.registries.default = Some("local".to_string());
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+    config.save(&config_path).unwrap();
+
+    let result = remove_registry(&config_path, "local");
+    assert!(result.is_ok());
+
+    let loaded = Config::load(&config_path).unwrap();
+    assert!(loaded.registries.list.is_empty());
+    assert!(loaded.registries.default.is_none());
+}
+
+#[test]
+fn test_remove_default_registry_clears_default() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let mut config = Config::default();
+    config.registries.default = Some("local".to_string());
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+    config.registries.list.push(RegistryEntry {
+        name: "dockerhub".to_string(),
+        url: "https://registry-1.docker.io".to_string(),
+    });
+    config.save(&config_path).unwrap();
+
+    let result = remove_registry(&config_path, "local");
+    assert!(result.is_ok());
+
+    let loaded = Config::load(&config_path).unwrap();
+    assert_eq!(loaded.registries.list.len(), 1);
+    assert!(loaded.registries.default.is_none());
+}
+
+#[test]
+fn test_remove_registry_empty_config() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let config = Config::default();
+    config.save(&config_path).unwrap();
+
+    let result = remove_registry(&config_path, "local");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("not found"));
+}
