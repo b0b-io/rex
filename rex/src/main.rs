@@ -80,6 +80,11 @@ enum RegistryCommands {
         /// Registry name
         name: String,
     },
+    /// Set the default registry
+    SetDefault {
+        /// Registry name
+        name: String,
+    },
 }
 
 fn main() {
@@ -112,6 +117,9 @@ fn main() {
             }
             RegistryCommands::Remove { name } => {
                 config::handle_registry_remove(&name);
+            }
+            RegistryCommands::SetDefault { name } => {
+                config::handle_registry_set_default(&name);
             }
         },
     }
