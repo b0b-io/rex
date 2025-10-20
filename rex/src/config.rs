@@ -68,7 +68,7 @@ pub struct RegistryEntry {
 }
 
 /// Registry entry with default marker for display purposes
-#[derive(Tabled, Serialize)]
+#[derive(Debug, Tabled, Serialize)]
 pub struct RegistryDisplay {
     #[tabled(rename = "NAME")]
     pub name: String,
@@ -76,6 +76,17 @@ pub struct RegistryDisplay {
     pub url: String,
     #[tabled(rename = "DEFAULT")]
     pub default: String,
+}
+
+impl Formattable for RegistryDisplay {
+    fn format_pretty(&self) -> String {
+        let default_marker = if !self.default.is_empty() {
+            " (default)"
+        } else {
+            ""
+        };
+        format!("Name: {}\nURL: {}{}", self.name, self.url, default_marker)
+    }
 }
 
 impl Formattable for RegistryEntry {
@@ -382,6 +393,32 @@ pub fn set_default_registry(config_path: &PathBuf, name: &str) -> Result<(), Str
     Ok(())
 }
 
+/// Show details of a specific registry
+pub fn show_registry(config_path: &PathBuf, name: &str) -> Result<RegistryDisplay, String> {
+    // Load existing config
+    let config = Config::load(config_path)?;
+
+    // Find the registry
+    let registry = config
+        .registries
+        .list
+        .iter()
+        .find(|r| r.name == name)
+        .ok_or_else(|| format!("Registry '{}' not found", name))?;
+
+    // Create display with default marker
+    let is_default = config.registries.default.as_ref() == Some(&name.to_string());
+    Ok(RegistryDisplay {
+        name: registry.name.clone(),
+        url: registry.url.clone(),
+        default: if is_default {
+            "*".to_string()
+        } else {
+            String::new()
+        },
+    })
+}
+
 /// Handle the config init subcommand
 pub fn handle_init() {
     let config_path = get_config_path();
@@ -519,6 +556,24 @@ pub fn handle_registry_set_default(name: &str) {
     let config_path = get_config_path();
     match set_default_registry(&config_path, name) {
         Ok(_) => println!("Set '{}' as default registry", name),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Handle the registry show subcommand
+pub fn handle_registry_show(name: &str, format: OutputFormat) {
+    let config_path = get_config_path();
+    match show_registry(&config_path, name) {
+        Ok(registry) => match crate::output::format_output(&registry, format) {
+            Ok(output) => println!("{}", output),
+            Err(e) => {
+                eprintln!("Error formatting output: {}", e);
+                std::process::exit(1);
+            }
+        },
         Err(e) => {
             eprintln!("Error: {}", e);
             std::process::exit(1);

@@ -729,3 +729,73 @@ fn test_set_default_registry_empty_config() {
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("not found"));
 }
+
+// Tests for registry show command
+#[test]
+fn test_show_registry_existing() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let mut config = Config::default();
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+    config.save(&config_path).unwrap();
+
+    let result = show_registry(&config_path, "local");
+    assert!(result.is_ok());
+    let registry = result.unwrap();
+    assert_eq!(registry.name, "local");
+    assert_eq!(registry.url, "http://localhost:5000");
+}
+
+#[test]
+fn test_show_registry_nonexistent() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let mut config = Config::default();
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+    config.save(&config_path).unwrap();
+
+    let result = show_registry(&config_path, "nonexistent");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("not found"));
+}
+
+#[test]
+fn test_show_registry_with_default_marker() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let mut config = Config::default();
+    config.registries.default = Some("local".to_string());
+    config.registries.list.push(RegistryEntry {
+        name: "local".to_string(),
+        url: "http://localhost:5000".to_string(),
+    });
+    config.save(&config_path).unwrap();
+
+    let result = show_registry(&config_path, "local");
+    assert!(result.is_ok());
+    let display = result.unwrap();
+    assert_eq!(display.name, "local");
+    assert_eq!(display.default, "*");
+}
+
+#[test]
+fn test_show_registry_empty_config() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let config = Config::default();
+    config.save(&config_path).unwrap();
+
+    let result = show_registry(&config_path, "local");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("not found"));
+}
