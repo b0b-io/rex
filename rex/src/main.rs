@@ -68,11 +68,17 @@ enum RegistryCommands {
         url: String,
     },
     /// List all registries
-    #[command(alias = "ls")]
+    #[command(visible_alias = "ls")]
     List {
         /// Output format: pretty, json, yaml
         #[arg(short, long, default_value = "pretty")]
         format: String,
+    },
+    /// Remove a registry
+    #[command(visible_alias = "rm")]
+    Remove {
+        /// Registry name
+        name: String,
     },
 }
 
@@ -103,6 +109,9 @@ fn main() {
             RegistryCommands::List { format } => {
                 let fmt = output::OutputFormat::from(format.as_str());
                 config::handle_registry_list(fmt);
+            }
+            RegistryCommands::Remove { name } => {
+                config::handle_registry_remove(&name);
             }
         },
     }

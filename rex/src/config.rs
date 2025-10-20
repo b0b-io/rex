@@ -336,6 +336,33 @@ pub fn add_registry(config_path: &PathBuf, name: &str, url: &str) -> Result<(), 
     Ok(())
 }
 
+/// Remove a registry from the configuration
+pub fn remove_registry(config_path: &PathBuf, name: &str) -> Result<(), String> {
+    // Load existing config
+    let mut config = Config::load(config_path)?;
+
+    // Find the registry index
+    let registry_index = config
+        .registries
+        .list
+        .iter()
+        .position(|r| r.name == name)
+        .ok_or_else(|| format!("Registry '{}' not found", name))?;
+
+    // Remove the registry
+    config.registries.list.remove(registry_index);
+
+    // Clear default if it was the removed registry
+    if config.registries.default.as_ref() == Some(&name.to_string()) {
+        config.registries.default = None;
+    }
+
+    // Save config
+    config.save(config_path)?;
+
+    Ok(())
+}
+
 /// Handle the config init subcommand
 pub fn handle_init() {
     let config_path = get_config_path();
@@ -449,6 +476,18 @@ pub fn handle_registry_add(name: &str, url: &str) {
     let config_path = get_config_path();
     match add_registry(&config_path, name, url) {
         Ok(_) => println!("Added registry '{}' at {}", name, url),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Handle the registry remove subcommand
+pub fn handle_registry_remove(name: &str) {
+    let config_path = get_config_path();
+    match remove_registry(&config_path, name) {
+        Ok(_) => println!("Removed registry '{}'", name),
         Err(e) => {
             eprintln!("Error: {}", e);
             std::process::exit(1);
