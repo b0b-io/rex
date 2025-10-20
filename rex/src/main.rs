@@ -85,6 +85,14 @@ enum RegistryCommands {
         /// Registry name
         name: String,
     },
+    /// Show registry details
+    Show {
+        /// Registry name
+        name: String,
+        /// Output format: pretty, json, yaml
+        #[arg(short, long, default_value = "pretty")]
+        format: String,
+    },
 }
 
 fn main() {
@@ -120,6 +128,10 @@ fn main() {
             }
             RegistryCommands::SetDefault { name } => {
                 config::handle_registry_set_default(&name);
+            }
+            RegistryCommands::Show { name, format } => {
+                let fmt = output::OutputFormat::from(format.as_str());
+                config::handle_registry_show(&name, fmt);
             }
         },
     }
