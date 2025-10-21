@@ -75,35 +75,48 @@ struct CachedToken {
 }
 ```
 
-### Phase 4: Credential Store (Future)
+### Phase 4: Credential Store ✓ (Completed)
 
-Load and store credentials from various sources:
+**Current Implementation:**
 
-**Credential Sources** (priority order):
-1. Explicitly provided credentials (via API)
-2. Docker config file (`~/.docker/config.json`)
-3. Podman auth file (`~/.config/containers/auth.json`)
-4. OS-specific secure storage (keychain/keyring)
-5. Interactive prompt (CLI only)
+A trait-based credential storage abstraction with a file-based implementation:
 
-**Docker/Podman config format:**
-```json
-{
-  "auths": {
-    "registry.example.com": {
-      "auth": "dXNlcm5hbWU6cGFzc3dvcmQ="
-    }
-  }
+```rust
+pub trait CredentialStore {
+    fn store(&mut self, registry: &str, credentials: &Credentials) -> Result<()>;
+    fn get(&self, registry: &str) -> Result<Option<Credentials>>;
+    fn remove(&mut self, registry: &str) -> Result<()>;
+    fn list(&self) -> Result<Vec<String>>;
 }
 ```
 
-The `auth` field is base64-encoded `username:password`.
+**FileCredentialStore:**
+- Stores credentials in TOML format at `~/.config/rex/credentials.toml`
+- Sets file permissions to 0600 (user read/write only) on Unix
+- Base64 encodes passwords for basic obfuscation
+- Supports multiple registries in a single file
+- Credentials persist across process restarts
 
-**Implementation needs:**
-- Parse Docker/Podman JSON config files
-- Decode base64 credentials
-- OS keychain integration (optional, future enhancement)
-- Credential storage API
+**Format:**
+```toml
+["registry.example.com"]
+username = "user"
+password = "cGFzc3dvcmQ="  # base64 encoded
+```
+
+**Security:**
+- File permissions restricted to user only (Unix)
+- Basic encoding (not encryption) - relies on filesystem permissions
+- TODO: Add OS keyring integration for production use
+
+**Future Enhancements:**
+1. Docker config file reader (`~/.docker/config.json`)
+2. Podman auth file reader (`~/.config/containers/auth.json`)
+3. OS-specific secure storage:
+   - macOS: Keychain
+   - Linux: Secret Service API (libsecret)
+   - Windows: Credential Manager
+4. Configuration option to choose storage backend
 
 ## Architecture Decisions
 
@@ -118,15 +131,22 @@ We implemented the core types (`Credentials`, `AuthChallenge`) first because the
 
 Following the same TDD approach as the client module:
 1. **Phase 1**: Core types (credentials, challenge parsing) ✓
-2. **Phase 2**: Token challenge/response flow (when needed)
-3. **Phase 3**: Token caching (performance optimization)
-4. **Phase 4**: Credential store (Docker/Podman integration)
+2. **Phase 4**: Credential store (file-based storage) ✓
+3. **Phase 2**: Token challenge/response flow (when needed)
+4. **Phase 3**: Token caching (performance optimization)
 
 This allows us to:
 - Use the auth module immediately for basic use cases
+- Store and retrieve credentials for login/logout commands
 - Add complexity only when needed
 - Test each phase independently
 - Avoid over-engineering
+
+**Why Phase 4 before Phase 2?**
+We implemented credential storage before the token flow because:
+- Login/logout commands need storage immediately
+- Storage is simpler and self-contained
+- Token flow can use stored credentials once implemented
 
 ## Security Considerations
 
@@ -168,18 +188,27 @@ This allows us to:
 
 ## Testing Strategy
 
-### Current Tests (9 tests)
+### Current Tests (22 tests)
 
-- **Credentials**:
+- **Credentials** (9 tests):
   - Creation methods (anonymous, basic, bearer)
   - Header value generation
   - Proper formatting
+  - AuthChallenge parsing (Bearer, Basic, error cases)
 
-- **AuthChallenge**:
-  - Parse valid Bearer challenges (with/without service, scope)
-  - Parse Basic challenges
-  - Error handling for missing realm
-  - Error handling for invalid format
+- **FileCredentialStore** (13 tests):
+  - Store and retrieve Basic credentials
+  - Get non-existent credentials returns None
+  - Remove credentials
+  - List all registries with credentials
+  - Persistence across instances (save/load from file)
+  - Overwrite existing credentials
+  - Multiple registries support
+  - Anonymous credentials rejection
+  - Bearer token storage not yet supported
+  - File permissions (0600 on Unix)
+  - Parent directory creation
+  - Empty store behavior
 
 ### Future Tests
 
@@ -231,6 +260,8 @@ async fn authenticated_request(client: &Client, url: &str, creds: &Credentials) 
 
 ### Current
 - `base64 = "0.22"` - For Basic authentication header encoding
+- `toml = "0.9.8"` - For credential file serialization
+- `serde` - For credential serialization/deserialization
 
 ### Future
 - HTTP client (already have reqwest in client module)
