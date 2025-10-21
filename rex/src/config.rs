@@ -78,6 +78,25 @@ pub struct RegistryDisplay {
     pub default: String,
 }
 
+/// Registry check result
+#[derive(Debug, Serialize)]
+pub struct RegistryCheckResult {
+    /// Registry name
+    pub name: String,
+    /// Registry URL
+    pub url: String,
+    /// Whether the registry is online and accessible
+    pub online: bool,
+    /// Authentication status
+    pub auth_required: bool,
+    /// Whether credentials are configured for this registry
+    pub authenticated: bool,
+    /// API version if available
+    pub api_version: Option<String>,
+    /// Error message if check failed
+    pub error: Option<String>,
+}
+
 impl Formattable for RegistryDisplay {
     fn format_pretty(&self) -> String {
         let default_marker = if !self.default.is_empty() {
@@ -86,6 +105,37 @@ impl Formattable for RegistryDisplay {
             ""
         };
         format!("Name: {}\nURL: {}{}", self.name, self.url, default_marker)
+    }
+}
+
+impl Formattable for RegistryCheckResult {
+    fn format_pretty(&self) -> String {
+        let mut output = String::new();
+        output.push_str(&format!("Registry: {}\n", self.name));
+        output.push_str(&format!("URL: {}\n", self.url));
+
+        if self.online {
+            output.push_str("Status: ✓ Online\n");
+            if let Some(ref api_version) = self.api_version {
+                output.push_str(&format!("API Version: {}\n", api_version));
+            }
+
+            // Show auth status
+            if self.authenticated {
+                output.push_str("Authentication: ✓ Authenticated\n");
+            } else if self.auth_required {
+                output.push_str("Authentication: ⚠ Required (not configured)\n");
+            } else {
+                output.push_str("Authentication: ○ Not required\n");
+            }
+        } else {
+            output.push_str("Status: ✗ Offline\n");
+            if let Some(ref error) = self.error {
+                output.push_str(&format!("Reason: {}\n", error));
+            }
+        }
+
+        output
     }
 }
 
@@ -615,6 +665,128 @@ pub fn handle_registry_list(format: OutputFormat) {
         }
         Err(e) => {
             eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Check registry connectivity and status
+pub(crate) async fn check_registry(config_path: &PathBuf, name: &str) -> RegistryCheckResult {
+    // Load config
+    let config = match Config::load(config_path) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            return RegistryCheckResult {
+                name: name.to_string(),
+                url: String::new(),
+                online: false,
+                auth_required: false,
+                authenticated: false,
+                api_version: None,
+                error: Some(format!("Configuration error: {}", e)),
+            };
+        }
+    };
+
+    // Find registry
+    let registry = match config.registries.list.iter().find(|r| r.name == name) {
+        Some(reg) => reg,
+        None => {
+            return RegistryCheckResult {
+                name: name.to_string(),
+                url: String::new(),
+                online: false,
+                auth_required: false,
+                authenticated: false,
+                api_version: None,
+                error: Some(format!(
+                    "Registry '{}' not found in configuration. Use 'rex registry add' to add it.",
+                    name
+                )),
+            };
+        }
+    };
+
+    // TODO: Check if credentials are configured for this registry (when we implement login)
+    let authenticated = false;
+
+    // Create client and check version
+    let client = match librex::client::Client::new(&registry.url) {
+        Ok(c) => c,
+        Err(e) => {
+            return RegistryCheckResult {
+                name: name.to_string(),
+                url: registry.url.clone(),
+                online: false,
+                auth_required: false,
+                authenticated: false,
+                api_version: None,
+                error: Some(format!("Invalid registry URL: {}", e)),
+            };
+        }
+    };
+
+    match client.check_version().await {
+        Ok(version) => RegistryCheckResult {
+            name: name.to_string(),
+            url: registry.url.clone(),
+            online: true,
+            auth_required: false,
+            authenticated,
+            api_version: version.api_version,
+            error: None,
+        },
+        Err(e) => {
+            // Check if error is authentication-related
+            let error_str = format!("{}", e);
+            let auth_required = error_str.contains("Authentication")
+                || error_str.contains("Unauthorized")
+                || error_str.contains("401")
+                || error_str.contains("403");
+
+            // Make error message more user-friendly
+            let friendly_error = if auth_required {
+                if authenticated {
+                    "Authentication failed. Please check your credentials.".to_string()
+                } else {
+                    "Authentication required. Use 'rex registry login' to authenticate.".to_string()
+                }
+            } else if error_str.contains("Failed to connect") {
+                "Cannot connect to registry. Please check the URL and your network connection."
+                    .to_string()
+            } else if error_str.contains("timed out") {
+                "Connection timed out. The registry may be slow or unreachable.".to_string()
+            } else if error_str.contains("Name or service not known")
+                || error_str.contains("No such host")
+            {
+                "Registry hostname could not be resolved. Please check the URL.".to_string()
+            } else {
+                // For other errors, show the original error
+                error_str
+            };
+
+            RegistryCheckResult {
+                name: name.to_string(),
+                url: registry.url.clone(),
+                online: false,
+                auth_required,
+                authenticated,
+                api_version: None,
+                error: Some(friendly_error),
+            }
+        }
+    }
+}
+
+/// Handle the registry check subcommand
+pub async fn handle_registry_check(name: &str, format: OutputFormat) {
+    let config_path = get_config_path();
+    let result = check_registry(&config_path, name).await;
+
+    match crate::output::format_output(&result, format) {
+        Ok(output) => println!("{}", output),
+        Err(e) => {
+            eprintln!("Error formatting output: {}", e);
             std::process::exit(1);
         }
     }

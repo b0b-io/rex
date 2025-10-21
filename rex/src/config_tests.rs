@@ -799,3 +799,170 @@ fn test_show_registry_empty_config() {
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("not found"));
 }
+
+// Tests for registry check command
+#[tokio::test]
+async fn test_check_registry_nonexistent() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    let config = Config::default();
+    config.save(&config_path).unwrap();
+
+    let result = super::check_registry(&config_path, "nonexistent").await;
+    assert!(!result.online);
+    assert!(result.error.unwrap().contains("not found in configuration"));
+}
+
+#[tokio::test]
+async fn test_check_registry_invalid_config() {
+    let config_path = std::path::PathBuf::from("/tmp/nonexistent_check_config.toml");
+
+    let result = super::check_registry(&config_path, "test").await;
+    assert!(!result.online);
+    assert!(result.error.unwrap().contains("Configuration error"));
+}
+
+#[test]
+fn test_registry_check_result_creation() {
+    let result = RegistryCheckResult {
+        name: "test".to_string(),
+        url: "http://localhost:5000".to_string(),
+        online: true,
+        auth_required: false,
+        authenticated: false,
+        api_version: Some("registry/2.0".to_string()),
+        error: None,
+    };
+
+    assert_eq!(result.name, "test");
+    assert!(result.online);
+    assert!(!result.auth_required);
+    assert!(!result.authenticated);
+    assert_eq!(result.api_version, Some("registry/2.0".to_string()));
+    assert!(result.error.is_none());
+}
+
+#[test]
+fn test_registry_check_result_with_error() {
+    let result = RegistryCheckResult {
+        name: "test".to_string(),
+        url: "http://localhost:5000".to_string(),
+        online: false,
+        auth_required: false,
+        authenticated: false,
+        api_version: None,
+        error: Some("Connection refused".to_string()),
+    };
+
+    assert!(!result.online);
+    assert!(result.error.is_some());
+    assert_eq!(result.error.unwrap(), "Connection refused");
+}
+
+#[test]
+fn test_registry_check_result_pretty_format_online() {
+    let result = RegistryCheckResult {
+        name: "test".to_string(),
+        url: "http://localhost:5000".to_string(),
+        online: true,
+        auth_required: false,
+        authenticated: false,
+        api_version: Some("registry/2.0".to_string()),
+        error: None,
+    };
+
+    let output = result.format_pretty();
+    assert!(output.contains("Registry: test"));
+    assert!(output.contains("URL: http://localhost:5000"));
+    assert!(output.contains("Status: ✓ Online"));
+    assert!(output.contains("API Version: registry/2.0"));
+    assert!(output.contains("Authentication: ○ Not required"));
+}
+
+#[test]
+fn test_registry_check_result_pretty_format_offline() {
+    let result = RegistryCheckResult {
+        name: "test".to_string(),
+        url: "http://localhost:5000".to_string(),
+        online: false,
+        auth_required: false,
+        authenticated: false,
+        api_version: None,
+        error: Some("Connection refused".to_string()),
+    };
+
+    let output = result.format_pretty();
+    assert!(output.contains("Registry: test"));
+    assert!(output.contains("Status: ✗ Offline"));
+    assert!(output.contains("Reason: Connection refused"));
+}
+
+#[test]
+fn test_registry_check_result_pretty_format_auth_required() {
+    let result = RegistryCheckResult {
+        name: "dockerhub".to_string(),
+        url: "https://registry-1.docker.io".to_string(),
+        online: false,
+        auth_required: true,
+        authenticated: false,
+        api_version: None,
+        error: Some("Authentication required".to_string()),
+    };
+
+    let output = result.format_pretty();
+    assert!(output.contains("Status: ✗ Offline"));
+    assert!(output.contains("Reason: Authentication required"));
+}
+
+#[test]
+fn test_registry_check_result_pretty_format_authenticated() {
+    let result = RegistryCheckResult {
+        name: "test".to_string(),
+        url: "http://localhost:5000".to_string(),
+        online: true,
+        auth_required: false,
+        authenticated: true,
+        api_version: Some("registry/2.0".to_string()),
+        error: None,
+    };
+
+    let output = result.format_pretty();
+    assert!(output.contains("Authentication: ✓ Authenticated"));
+}
+
+#[test]
+fn test_registry_check_result_pretty_format_auth_required_not_authenticated() {
+    let result = RegistryCheckResult {
+        name: "test".to_string(),
+        url: "http://localhost:5000".to_string(),
+        online: true,
+        auth_required: true,
+        authenticated: false,
+        api_version: Some("registry/2.0".to_string()),
+        error: None,
+    };
+
+    let output = result.format_pretty();
+    assert!(output.contains("Authentication: ⚠ Required (not configured)"));
+}
+
+#[test]
+fn test_registry_check_result_serialization() {
+    let result = RegistryCheckResult {
+        name: "test".to_string(),
+        url: "http://localhost:5000".to_string(),
+        online: true,
+        auth_required: false,
+        authenticated: false,
+        api_version: Some("registry/2.0".to_string()),
+        error: None,
+    };
+
+    let json = serde_json::to_string(&result).unwrap();
+    assert!(json.contains("\"name\":\"test\""));
+    assert!(json.contains("\"online\":true"));
+    assert!(json.contains("\"auth_required\":false"));
+    assert!(json.contains("\"authenticated\":false"));
+    assert!(json.contains("\"api_version\":\"registry/2.0\""));
+}
