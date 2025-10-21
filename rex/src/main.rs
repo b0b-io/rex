@@ -101,6 +101,22 @@ enum RegistryCommands {
         #[arg(short, long, default_value = "pretty")]
         format: String,
     },
+    /// Login to a registry
+    Login {
+        /// Registry name
+        name: String,
+        /// Username (will prompt if not provided)
+        #[arg(short, long)]
+        username: Option<String>,
+        /// Password (will prompt if not provided)
+        #[arg(short, long)]
+        password: Option<String>,
+    },
+    /// Logout from a registry
+    Logout {
+        /// Registry name
+        name: String,
+    },
 }
 
 #[tokio::main]
@@ -145,6 +161,17 @@ async fn main() {
             RegistryCommands::Check { name, format } => {
                 let fmt = output::OutputFormat::from(format.as_str());
                 config::handle_registry_check(&name, fmt).await;
+            }
+            RegistryCommands::Login {
+                name,
+                username,
+                password,
+            } => {
+                config::handle_registry_login(&name, username.as_deref(), password.as_deref())
+                    .await;
+            }
+            RegistryCommands::Logout { name } => {
+                config::handle_registry_logout(&name);
             }
         },
     }

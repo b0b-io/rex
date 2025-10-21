@@ -1,4 +1,5 @@
 use crate::output::{Formattable, OutputFormat};
+use librex::auth::CredentialStore;
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
@@ -707,8 +708,13 @@ pub(crate) async fn check_registry(config_path: &PathBuf, name: &str) -> Registr
         }
     };
 
-    // TODO: Check if credentials are configured for this registry (when we implement login)
-    let authenticated = false;
+    // Check if credentials are configured for this registry
+    let creds_path = get_credentials_path();
+    let authenticated = if let Ok(store) = librex::auth::FileCredentialStore::new(creds_path) {
+        store.get(&registry.url).unwrap_or(None).is_some()
+    } else {
+        false
+    };
 
     // Create client and check version
     let client = match librex::client::Client::new(&registry.url) {
@@ -787,6 +793,191 @@ pub async fn handle_registry_check(name: &str, format: OutputFormat) {
         Ok(output) => println!("{}", output),
         Err(e) => {
             eprintln!("Error formatting output: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Get credentials path
+pub fn get_credentials_path() -> PathBuf {
+    if let Ok(creds_path) = env::var("REX_CREDENTIALS") {
+        return PathBuf::from(creds_path);
+    }
+
+    // Default to ~/.config/rex/credentials.toml
+    if let Some(config_dir) = dirs::config_dir() {
+        config_dir.join("rex").join("credentials.toml")
+    } else {
+        // Fallback to current directory
+        PathBuf::from("credentials.toml")
+    }
+}
+
+/// Prompt for username if not provided
+fn prompt_username(provided_username: Option<&str>) -> Result<String, String> {
+    match provided_username {
+        Some(username) => Ok(username.to_string()),
+        None => {
+            print!("Username: ");
+            std::io::Write::flush(&mut std::io::stdout())
+                .map_err(|e| format!("Failed to flush stdout: {}", e))?;
+
+            let mut username = String::new();
+            std::io::stdin()
+                .read_line(&mut username)
+                .map_err(|e| format!("Failed to read username: {}", e))?;
+
+            Ok(username.trim().to_string())
+        }
+    }
+}
+
+/// Prompt for password if not provided
+fn prompt_password(provided_password: Option<&str>) -> Result<String, String> {
+    match provided_password {
+        Some(password) => Ok(password.to_string()),
+        None => rpassword::prompt_password("Password: ")
+            .map_err(|e| format!("Failed to read password: {}", e)),
+    }
+}
+
+/// Handle the registry login subcommand
+pub async fn handle_registry_login(name: &str, username: Option<&str>, password: Option<&str>) {
+    let config_path = get_config_path();
+
+    // Load config to verify registry exists
+    let config = match Config::load(&config_path) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Find registry
+    let registry = match config.registries.list.iter().find(|r| r.name == name) {
+        Some(reg) => reg,
+        None => {
+            eprintln!(
+                "Error: Registry '{}' not found. Use 'rex registry add' to add it first.",
+                name
+            );
+            std::process::exit(1);
+        }
+    };
+
+    // Get credentials
+    let username = match prompt_username(username) {
+        Ok(u) => u,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let password = match prompt_password(password) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Create credentials
+    let credentials = librex::auth::Credentials::basic(&username, &password);
+
+    // Verify credentials by attempting to authenticate with the registry
+    println!("Verifying credentials...");
+    let client = match librex::client::Client::new(&registry.url) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: Invalid registry URL: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    match client
+        .check_version_with_credentials(Some(&credentials))
+        .await
+    {
+        Ok(_) => {
+            println!("✓ Credentials verified successfully");
+        }
+        Err(e) => {
+            let error_str = format!("{}", e);
+            if error_str.contains("Authentication") || error_str.contains("401") {
+                eprintln!("Error: Authentication failed. Please check your username and password.");
+                std::process::exit(1);
+            } else if error_str.contains("403") || error_str.contains("Forbidden") {
+                eprintln!(
+                    "Error: Access forbidden. Your credentials may not have the required permissions."
+                );
+                std::process::exit(1);
+            } else {
+                eprintln!("Error: Failed to verify credentials: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Store credentials
+    let creds_path = get_credentials_path();
+    let mut store = match librex::auth::FileCredentialStore::new(creds_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: Failed to initialize credential store: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    match store.store(&registry.url, &credentials) {
+        Ok(_) => println!("Successfully stored credentials for '{}'", name),
+        Err(e) => {
+            eprintln!("Error: Failed to store credentials: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Handle the registry logout subcommand
+pub fn handle_registry_logout(name: &str) {
+    let config_path = get_config_path();
+
+    // Load config to verify registry exists and get URL
+    let config = match Config::load(&config_path) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Find registry
+    let registry = match config.registries.list.iter().find(|r| r.name == name) {
+        Some(reg) => reg,
+        None => {
+            eprintln!(
+                "Error: Registry '{}' not found. Use 'rex registry list' to see configured registries.",
+                name
+            );
+            std::process::exit(1);
+        }
+    };
+
+    // Remove credentials
+    let creds_path = get_credentials_path();
+    let mut store = match librex::auth::FileCredentialStore::new(creds_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error: Failed to initialize credential store: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    match store.remove(&registry.url) {
+        Ok(_) => println!("Successfully logged out from '{}'", name),
+        Err(e) => {
+            eprintln!("Error: Failed to remove credentials: {}", e);
             std::process::exit(1);
         }
     }
