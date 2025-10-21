@@ -81,7 +81,7 @@ enum RegistryCommands {
         name: String,
     },
     /// Set the default registry
-    SetDefault {
+    Use {
         /// Registry name
         name: String,
     },
@@ -135,8 +135,8 @@ async fn main() {
             RegistryCommands::Remove { name } => {
                 config::handle_registry_remove(&name);
             }
-            RegistryCommands::SetDefault { name } => {
-                config::handle_registry_set_default(&name);
+            RegistryCommands::Use { name } => {
+                config::handle_registry_use(&name);
             }
             RegistryCommands::Show { name, format } => {
                 let fmt = output::OutputFormat::from(format.as_str());
