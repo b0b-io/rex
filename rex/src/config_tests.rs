@@ -656,9 +656,9 @@ fn test_remove_registry_empty_config() {
     assert!(result.unwrap_err().contains("not found"));
 }
 
-// Tests for registry set-default command
+// Tests for registry use command
 #[test]
-fn test_set_default_registry_existing() {
+fn test_use_registry_existing() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
@@ -674,7 +674,7 @@ fn test_set_default_registry_existing() {
     });
     config.save(&config_path).unwrap();
 
-    let result = set_default_registry(&config_path, "local");
+    let result = use_registry(&config_path, "local");
     assert!(result.is_ok());
 
     let loaded = Config::load(&config_path).unwrap();
@@ -682,7 +682,7 @@ fn test_set_default_registry_existing() {
 }
 
 #[test]
-fn test_set_default_registry_nonexistent() {
+fn test_use_registry_nonexistent() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
@@ -693,13 +693,13 @@ fn test_set_default_registry_nonexistent() {
     });
     config.save(&config_path).unwrap();
 
-    let result = set_default_registry(&config_path, "nonexistent");
+    let result = use_registry(&config_path, "nonexistent");
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("not found"));
 }
 
 #[test]
-fn test_set_default_registry_when_none_set() {
+fn test_use_registry_when_none_set() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
@@ -710,7 +710,7 @@ fn test_set_default_registry_when_none_set() {
     });
     config.save(&config_path).unwrap();
 
-    let result = set_default_registry(&config_path, "local");
+    let result = use_registry(&config_path, "local");
     assert!(result.is_ok());
 
     let loaded = Config::load(&config_path).unwrap();
@@ -718,14 +718,14 @@ fn test_set_default_registry_when_none_set() {
 }
 
 #[test]
-fn test_set_default_registry_empty_config() {
+fn test_use_registry_empty_config() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
     let config = Config::default();
     config.save(&config_path).unwrap();
 
-    let result = set_default_registry(&config_path, "local");
+    let result = use_registry(&config_path, "local");
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("not found"));
 }

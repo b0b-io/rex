@@ -425,7 +425,7 @@ pub fn remove_registry(config_path: &PathBuf, name: &str) -> Result<(), String> 
 }
 
 /// Set the default registry
-pub fn set_default_registry(config_path: &PathBuf, name: &str) -> Result<(), String> {
+pub fn use_registry(config_path: &PathBuf, name: &str) -> Result<(), String> {
     // Load existing config
     let mut config = Config::load(config_path)?;
 
@@ -601,10 +601,10 @@ pub fn handle_registry_remove(name: &str) {
     }
 }
 
-/// Handle the registry set-default subcommand
-pub fn handle_registry_set_default(name: &str) {
+/// Handle the registry use subcommand
+pub fn handle_registry_use(name: &str) {
     let config_path = get_config_path();
-    match set_default_registry(&config_path, name) {
+    match use_registry(&config_path, name) {
         Ok(_) => println!("Set '{}' as default registry", name),
         Err(e) => {
             eprintln!("Error: {}", e);
