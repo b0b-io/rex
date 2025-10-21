@@ -21,6 +21,7 @@ serde_json = "1.0"
 sha2 = "0.10"
 thiserror = "1.0"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+toml = "0.9.8"
 walkdir = "2"
 
 [dev-dependencies]

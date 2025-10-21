@@ -3,9 +3,17 @@
 //! This module provides authentication support for OCI-compliant registries,
 //! including anonymous access, Basic authentication, and Bearer token authentication
 //! following the OCI Distribution Specification authentication flow.
+//!
+//! It also provides credential storage abstraction for persisting authentication
+//! credentials across sessions.
 
 use crate::error::{Result, RexError};
 
+mod store;
+pub use store::{CredentialStore, FileCredentialStore};
+
+#[cfg(test)]
+mod store_tests;
 #[cfg(test)]
 mod tests;
 
