@@ -93,9 +93,18 @@ enum RegistryCommands {
         #[arg(short, long, default_value = "pretty")]
         format: String,
     },
+    /// Check registry connectivity and status
+    Check {
+        /// Registry name
+        name: String,
+        /// Output format: pretty, json, yaml
+        #[arg(short, long, default_value = "pretty")]
+        format: String,
+    },
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
@@ -132,6 +141,10 @@ fn main() {
             RegistryCommands::Show { name, format } => {
                 let fmt = output::OutputFormat::from(format.as_str());
                 config::handle_registry_show(&name, fmt);
+            }
+            RegistryCommands::Check { name, format } => {
+                let fmt = output::OutputFormat::from(format.as_str());
+                config::handle_registry_check(&name, fmt).await;
             }
         },
     }
