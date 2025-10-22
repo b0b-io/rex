@@ -60,5 +60,5 @@ pub fn format_output_vec<T: Formattable>(
 }
 
 #[cfg(test)]
-#[path = "output_tests.rs"]
+#[path = "tests.rs"]
 mod tests;

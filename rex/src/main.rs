@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 
+mod commands;
 mod config;
-mod output;
-mod version;
+mod format;
 
 /// Rex - Container Registry Explorer
 ///
@@ -125,53 +125,57 @@ async fn main() {
 
     match cli.command {
         Commands::Version => {
-            version::print_version();
+            commands::version::print_version();
         }
         Commands::Config { command } => match command {
-            ConfigCommands::Init => config::handle_init(),
+            ConfigCommands::Init => commands::config::handle_init(),
             ConfigCommands::Get { key, format } => {
-                let fmt = output::OutputFormat::from(format.as_str());
-                config::handle_get(key.as_deref(), fmt);
+                let fmt = format::OutputFormat::from(format.as_str());
+                commands::config::handle_get(key.as_deref(), fmt);
             }
             ConfigCommands::Set { key, value } => {
-                config::handle_set(key.as_deref(), value.as_deref());
+                commands::config::handle_set(key.as_deref(), value.as_deref());
             }
             ConfigCommands::Edit => {
-                config::handle_set(None, None);
+                commands::config::handle_set(None, None);
             }
         },
         Commands::Registry { command } => match command {
             RegistryCommands::Init { name, url } => {
-                config::handle_registry_init(&name, &url);
+                commands::registry::handlers::handle_registry_init(&name, &url);
             }
             RegistryCommands::List { format } => {
-                let fmt = output::OutputFormat::from(format.as_str());
-                config::handle_registry_list(fmt);
+                let fmt = format::OutputFormat::from(format.as_str());
+                commands::registry::handlers::handle_registry_list(fmt);
             }
             RegistryCommands::Remove { name } => {
-                config::handle_registry_remove(&name);
+                commands::registry::handlers::handle_registry_remove(&name);
             }
             RegistryCommands::Use { name } => {
-                config::handle_registry_use(&name);
+                commands::registry::handlers::handle_registry_use(&name);
             }
             RegistryCommands::Show { name, format } => {
-                let fmt = output::OutputFormat::from(format.as_str());
-                config::handle_registry_show(&name, fmt);
+                let fmt = format::OutputFormat::from(format.as_str());
+                commands::registry::handlers::handle_registry_show(&name, fmt);
             }
             RegistryCommands::Check { name, format } => {
-                let fmt = output::OutputFormat::from(format.as_str());
-                config::handle_registry_check(&name, fmt).await;
+                let fmt = format::OutputFormat::from(format.as_str());
+                commands::registry::handlers::handle_registry_check(&name, fmt).await;
             }
             RegistryCommands::Login {
                 name,
                 username,
                 password,
             } => {
-                config::handle_registry_login(&name, username.as_deref(), password.as_deref())
-                    .await;
+                commands::registry::handlers::handle_registry_login(
+                    &name,
+                    username.as_deref(),
+                    password.as_deref(),
+                )
+                .await;
             }
             RegistryCommands::Logout { name } => {
-                config::handle_registry_logout(&name);
+                commands::registry::handlers::handle_registry_logout(&name);
             }
         },
     }
