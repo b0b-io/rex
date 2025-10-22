@@ -252,11 +252,65 @@ impl Client {
     /// - The registry does not support the OCI Distribution Specification
     /// - Authentication is required but not provided
     pub async fn check_version(&self) -> Result<RegistryVersion> {
+        self.check_version_with_credentials(None).await
+    }
+
+    /// Checks if the registry supports the OCI Distribution Specification v2 API with optional credentials.
+    ///
+    /// This method performs a GET request to the `/v2/` endpoint with optional Basic authentication.
+    /// It can be used to verify credentials or check if a registry requires authentication.
+    ///
+    /// # Arguments
+    ///
+    /// * `credentials` - Optional credentials for authentication
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use librex::client::Client;
+    /// use librex::auth::Credentials;
+    ///
+    /// # async fn example() -> librex::error::Result<()> {
+    /// let client = Client::new("http://localhost:5000")?;
+    ///
+    /// // Check without credentials
+    /// let version = client.check_version_with_credentials(None).await?;
+    ///
+    /// // Check with credentials
+    /// let creds = Credentials::basic("user", "pass");
+    /// let version = client.check_version_with_credentials(Some(&creds)).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// Returns `RegistryVersion` containing:
+    /// - `api_version`: The Docker-Distribution-API-Version header value (typically "registry/2.0")
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The registry is unreachable
+    /// - The registry does not support the OCI Distribution Specification
+    /// - Authentication is required but invalid credentials were provided
+    /// - Authentication fails (401 or 403)
+    pub async fn check_version_with_credentials(
+        &self,
+        credentials: Option<&crate::auth::Credentials>,
+    ) -> Result<RegistryVersion> {
         let url = format!("{}/v2/", self.registry_url);
 
-        let response = self
-            .http_client
-            .get(&url)
+        let mut request = self.http_client.get(&url);
+
+        // Add Authorization header if credentials are provided
+        if let Some(creds) = credentials
+            && let Some(auth_header) = creds.to_header_value()
+        {
+            request = request.header("Authorization", auth_header);
+        }
+
+        let response = request
             .send()
             .await
             .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;
