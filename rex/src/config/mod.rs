@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 /// Main configuration structure
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// Style configuration
     #[serde(default)]
@@ -14,6 +14,23 @@ pub struct Config {
     /// Registry configuration
     #[serde(default)]
     pub registries: RegistriesConfig,
+    /// Cache directory path
+    #[serde(default = "default_cache_dir")]
+    pub cache_dir: String,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            style: StyleConfig::default(),
+            registries: RegistriesConfig::default(),
+            cache_dir: default_cache_dir(),
+        }
+    }
+}
+
+fn default_cache_dir() -> String {
+    get_default_cache_dir().to_string_lossy().to_string()
 }
 
 /// Style configuration section
@@ -132,6 +149,7 @@ pub fn get_config_value(config_path: &PathBuf, key: &str) -> Result<String, Stri
             OutputFormat::Yaml => "yaml".to_string(),
         }),
         ["style", "color"] => Ok(config.style.color.to_string()),
+        ["cache_dir"] => Ok(config.cache_dir.clone()),
         _ => Err(format!("Unknown config key: {}", key)),
     }
 }
@@ -155,6 +173,9 @@ pub fn set_config_value(config_path: &PathBuf, key: &str, value: &str) -> Result
             config.style.color = value.parse::<bool>().map_err(|_| {
                 format!("Invalid boolean value '{}'. Use 'true' or 'false'.", value)
             })?;
+        }
+        ["cache_dir"] => {
+            config.cache_dir = value.to_string();
         }
         _ => return Err(format!("Unknown config key: {}", key)),
     }
@@ -207,6 +228,19 @@ pub fn get_credentials_path() -> PathBuf {
     } else {
         // Fallback to current directory
         PathBuf::from("credentials.toml")
+    }
+}
+
+/// Get the default cache directory
+///
+/// Returns the default cache directory for rex.
+/// Uses platform-specific cache directory (~/.cache/rex on Linux, ~/Library/Caches/rex on macOS, etc.)
+pub fn get_default_cache_dir() -> PathBuf {
+    if let Some(cache_dir) = dirs::cache_dir() {
+        cache_dir.join("rex")
+    } else {
+        // Fallback to temp directory
+        env::temp_dir().join("rex-cache")
     }
 }
 
