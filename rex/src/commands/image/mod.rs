@@ -37,6 +37,27 @@ impl Formattable for ImageInfo {
     }
 }
 
+/// Tag information for a specific image
+#[derive(Debug, Serialize, Tabled)]
+pub struct TagInfo {
+    /// Tag name
+    #[tabled(rename = "TAG")]
+    pub tag: String,
+}
+
+impl TagInfo {
+    /// Create a new TagInfo
+    pub fn new(tag: String) -> Self {
+        Self { tag }
+    }
+}
+
+impl Formattable for TagInfo {
+    fn format_pretty(&self) -> String {
+        self.tag.clone()
+    }
+}
+
 /// List all repositories (images) in a registry
 ///
 /// # Arguments
@@ -118,6 +139,82 @@ pub(crate) async fn list_images(
     }
 
     Ok(images)
+}
+
+/// List all tags for a specific image (repository)
+///
+/// # Arguments
+///
+/// * `registry_url` - URL of the registry to query
+/// * `image_name` - Name of the repository/image
+/// * `filter` - Optional filter pattern for fuzzy matching
+/// * `limit` - Optional limit on number of results
+///
+/// # Returns
+///
+/// Returns a vector of TagInfo structs with tag information
+pub(crate) async fn list_tags(
+    registry_url: &str,
+    image_name: &str,
+    filter: Option<&str>,
+    limit: Option<usize>,
+) -> Result<Vec<TagInfo>, String> {
+    // Get cache directory from config (per-registry subdirectory)
+    let cache_dir = get_registry_cache_dir(registry_url)?;
+
+    // Load credentials if available
+    let creds_path = config::get_credentials_path();
+    let credentials = if creds_path.exists() {
+        if let Ok(store) = librex::auth::FileCredentialStore::new(creds_path) {
+            store.get(registry_url).ok().flatten()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Build Rex instance with cache and credentials
+    let mut builder = librex::Rex::builder()
+        .registry_url(registry_url)
+        .with_cache(cache_dir);
+
+    if let Some(creds) = credentials {
+        builder = builder.with_credentials(creds);
+    }
+
+    let mut rex = builder
+        .build()
+        .await
+        .map_err(|e| format!("Failed to connect to registry: {}", e))?;
+
+    // List tags for the repository
+    let tags = if let Some(pattern) = filter {
+        // Use fuzzy search if filter is provided
+        rex.search_tags(image_name, pattern)
+            .await
+            .map_err(|e| format!("Failed to search tags: {}", e))?
+            .into_iter()
+            .map(|r| r.value)
+            .collect()
+    } else {
+        // List all tags
+        rex.list_tags(image_name)
+            .await
+            .map_err(|e| format!("Failed to list tags: {}", e))?
+    };
+
+    // Apply limit if specified
+    let tags: Vec<String> = if let Some(n) = limit {
+        tags.into_iter().take(n).collect()
+    } else {
+        tags
+    };
+
+    // Convert to TagInfo
+    let tag_infos = tags.into_iter().map(TagInfo::new).collect();
+
+    Ok(tag_infos)
 }
 
 /// Get the registry URL from config or use default

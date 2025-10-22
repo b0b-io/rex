@@ -35,13 +35,15 @@ enum Commands {
     },
     /// Explore images and their details
     Image {
+        /// Image name (repository) - if provided, lists tags for this image
+        name: Option<String>,
         /// Output format: pretty, json, yaml
         #[arg(short, long, default_value = "pretty")]
         format: String,
-        /// Show only image names
+        /// Show only names (image names or tag names)
         #[arg(short, long)]
         quiet: bool,
-        /// Filter images by pattern (supports fuzzy matching)
+        /// Filter by pattern (supports fuzzy matching)
         #[arg(long)]
         filter: Option<String>,
         /// Limit number of results
@@ -194,14 +196,28 @@ async fn main() {
             }
         },
         Commands::Image {
+            name,
             format,
             quiet,
             filter,
             limit,
         } => {
             let fmt = format::OutputFormat::from(format.as_str());
-            commands::image::handlers::handle_image_list(fmt, quiet, filter.as_deref(), limit)
+            if let Some(image_name) = name {
+                // List tags for specific image
+                commands::image::handlers::handle_image_tags(
+                    image_name.as_str(),
+                    fmt,
+                    quiet,
+                    filter.as_deref(),
+                    limit,
+                )
                 .await;
+            } else {
+                // List all images
+                commands::image::handlers::handle_image_list(fmt, quiet, filter.as_deref(), limit)
+                    .await;
+            }
         }
     }
 }

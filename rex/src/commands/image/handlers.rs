@@ -64,6 +64,70 @@ pub async fn handle_image_list(
     }
 }
 
+/// Handle the image tags command (list tags for a specific image)
+pub async fn handle_image_tags(
+    image_name: &str,
+    format: OutputFormat,
+    quiet: bool,
+    filter: Option<&str>,
+    limit: Option<usize>,
+) {
+    // Get registry URL from config
+    let registry_url = match get_registry_url() {
+        Ok(url) => url,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // List tags for the image
+    let tags = match list_tags(&registry_url, image_name, filter, limit).await {
+        Ok(tags) => tags,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Handle quiet mode
+    if quiet {
+        for tag in tags {
+            println!("{}", tag.tag);
+        }
+        return;
+    }
+
+    // Handle empty results
+    if tags.is_empty() {
+        println!("No tags found for image '{}'.", image_name);
+        return;
+    }
+
+    // Format output
+    match format {
+        OutputFormat::Pretty => {
+            use tabled::Table;
+            let table = Table::new(&tags).to_string();
+            println!("{}", table);
+        }
+        OutputFormat::Json => match serde_json::to_string_pretty(&tags) {
+            Ok(json) => println!("{}", json),
+            Err(e) => {
+                eprintln!("Error formatting JSON: {}", e);
+                std::process::exit(1);
+            }
+        },
+        OutputFormat::Yaml => match serde_yaml::to_string(&tags) {
+            Ok(yaml) => print!("{}", yaml),
+            Err(e) => {
+                eprintln!("Error formatting YAML: {}", e);
+                std::process::exit(1);
+            }
+        },
+    }
+}
+
 #[cfg(test)]
 #[path = "handlers_tests.rs"]
 mod tests;
