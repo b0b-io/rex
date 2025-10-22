@@ -316,8 +316,20 @@ pub(crate) async fn check_registry(config_path: &PathBuf, name: &str) -> Registr
         false
     };
 
+    // Load credentials if available
+    let creds_path = config::get_credentials_path();
+    let credentials = if creds_path.exists() {
+        if let Ok(store) = librex::auth::FileCredentialStore::new(creds_path) {
+            store.get(&registry.url).ok().flatten()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Create client and check version
-    let client = match librex::client::Client::new(&registry.url) {
+    let client = match librex::client::Client::new(&registry.url, credentials) {
         Ok(c) => c,
         Err(e) => {
             return RegistryCheckResult {
@@ -444,23 +456,19 @@ pub(crate) async fn login_registry(
 
     // Verify credentials by attempting to authenticate with the registry
     println!("Verifying credentials...");
-    let client = librex::client::Client::new(&registry.url)
+    let client = librex::client::Client::new(&registry.url, Some(credentials.clone()))
         .map_err(|e| format!("Invalid registry URL: {}", e))?;
 
-    client
-        .check_version_with_credentials(Some(&credentials))
-        .await
-        .map_err(|e| {
-            let error_str = format!("{}", e);
-            if error_str.contains("Authentication") || error_str.contains("401") {
-                "Authentication failed. Please check your username and password.".to_string()
-            } else if error_str.contains("403") || error_str.contains("Forbidden") {
-                "Access forbidden. Your credentials may not have the required permissions."
-                    .to_string()
-            } else {
-                format!("Failed to verify credentials: {}", e)
-            }
-        })?;
+    client.check_version().await.map_err(|e| {
+        let error_str = format!("{}", e);
+        if error_str.contains("Authentication") || error_str.contains("401") {
+            "Authentication failed. Please check your username and password.".to_string()
+        } else if error_str.contains("403") || error_str.contains("Forbidden") {
+            "Access forbidden. Your credentials may not have the required permissions.".to_string()
+        } else {
+            format!("Failed to verify credentials: {}", e)
+        }
+    })?;
 
     println!("✓ Credentials verified successfully");
 

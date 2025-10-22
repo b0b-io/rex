@@ -7,7 +7,7 @@ use tempfile::tempdir;
 
 #[test]
 fn test_registry_new() {
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     let registry = Registry::new(client, None, None);
 
     assert!(registry.cache.is_none());
@@ -16,7 +16,7 @@ fn test_registry_new() {
 
 #[test]
 fn test_registry_new_with_cache() {
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     let temp_dir = tempdir().unwrap();
     let config = Config::default();
     let capacity = NonZeroUsize::new(100).unwrap();
@@ -30,7 +30,7 @@ fn test_registry_new_with_cache() {
 
 #[test]
 fn test_registry_credentials_management() {
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     let mut registry = Registry::new(client, None, None);
 
     // Initially no credentials
