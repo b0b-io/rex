@@ -128,6 +128,48 @@ pub async fn handle_image_tags(
     }
 }
 
+/// Handle the image details command (show details for image:tag or image@digest)
+pub async fn handle_image_details(reference: &str, format: OutputFormat) {
+    // Get registry URL from config
+    let registry_url = match get_registry_url() {
+        Ok(url) => url,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Get image details
+    let details = match get_image_details(&registry_url, reference).await {
+        Ok(details) => details,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Format output
+    match format {
+        OutputFormat::Pretty => {
+            println!("{}", details.format_pretty());
+        }
+        OutputFormat::Json => match serde_json::to_string_pretty(&details) {
+            Ok(json) => println!("{}", json),
+            Err(e) => {
+                eprintln!("Error formatting JSON: {}", e);
+                std::process::exit(1);
+            }
+        },
+        OutputFormat::Yaml => match serde_yaml::to_string(&details) {
+            Ok(yaml) => print!("{}", yaml),
+            Err(e) => {
+                eprintln!("Error formatting YAML: {}", e);
+                std::process::exit(1);
+            }
+        },
+    }
+}
+
 #[cfg(test)]
 #[path = "handlers_tests.rs"]
 mod tests;
