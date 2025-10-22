@@ -60,8 +60,8 @@ enum ConfigCommands {
 
 #[derive(Subcommand, Debug)]
 enum RegistryCommands {
-    /// Add a new registry
-    Add {
+    /// Initialize a new registry
+    Init {
         /// Registry name
         name: String,
         /// Registry URL
@@ -141,8 +141,8 @@ async fn main() {
             }
         },
         Commands::Registry { command } => match command {
-            RegistryCommands::Add { name, url } => {
-                config::handle_registry_add(&name, &url);
+            RegistryCommands::Init { name, url } => {
+                config::handle_registry_init(&name, &url);
             }
             RegistryCommands::List { format } => {
                 let fmt = output::OutputFormat::from(format.as_str());

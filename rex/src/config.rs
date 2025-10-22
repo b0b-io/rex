@@ -364,8 +364,8 @@ pub fn validate_registry_url(url_str: &str) -> Result<String, String> {
     Ok(parsed_url.to_string())
 }
 
-/// Add a new registry to the configuration
-pub fn add_registry(config_path: &PathBuf, name: &str, url: &str) -> Result<(), String> {
+/// Initialize a new registry in the configuration
+pub fn init_registry(config_path: &PathBuf, name: &str, url: &str) -> Result<(), String> {
     // Load existing config or create default
     let mut config = if config_path.exists() {
         Config::load(config_path)?
@@ -578,11 +578,11 @@ pub fn list_registries(config_path: &PathBuf) -> Result<Vec<RegistryDisplay>, St
     Ok(registries)
 }
 
-/// Handle the registry add subcommand
-pub fn handle_registry_add(name: &str, url: &str) {
+/// Handle the registry init subcommand
+pub fn handle_registry_init(name: &str, url: &str) {
     let config_path = get_config_path();
-    match add_registry(&config_path, name, url) {
-        Ok(_) => println!("Added registry '{}' at {}", name, url),
+    match init_registry(&config_path, name, url) {
+        Ok(_) => println!("Initialized registry '{}' at {}", name, url),
         Err(e) => {
             eprintln!("Error: {}", e);
             std::process::exit(1);

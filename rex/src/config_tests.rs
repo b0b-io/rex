@@ -294,16 +294,16 @@ fn test_registry_entry_equality() {
     assert_ne!(entry1, entry3);
 }
 
-// Tests for registry add command
+// Tests for registry init command
 #[test]
-fn test_add_registry_to_empty_config() {
+fn test_init_registry_to_empty_config() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
     let config = Config::default();
     config.save(&config_path).unwrap();
 
-    let result = add_registry(&config_path, "local", "http://localhost:5000");
+    let result = init_registry(&config_path, "local", "http://localhost:5000");
     assert!(result.is_ok());
 
     let loaded = Config::load(&config_path).unwrap();
@@ -313,7 +313,7 @@ fn test_add_registry_to_empty_config() {
 }
 
 #[test]
-fn test_add_registry_to_existing_registries() {
+fn test_init_registry_to_existing_registries() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
@@ -324,7 +324,7 @@ fn test_add_registry_to_existing_registries() {
     });
     config.save(&config_path).unwrap();
 
-    let result = add_registry(&config_path, "local", "http://localhost:5000");
+    let result = init_registry(&config_path, "local", "http://localhost:5000");
     assert!(result.is_ok());
 
     let loaded = Config::load(&config_path).unwrap();
@@ -333,7 +333,7 @@ fn test_add_registry_to_existing_registries() {
 }
 
 #[test]
-fn test_add_registry_duplicate_name_fails() {
+fn test_init_registry_duplicate_name_fails() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
@@ -344,17 +344,17 @@ fn test_add_registry_duplicate_name_fails() {
     });
     config.save(&config_path).unwrap();
 
-    let result = add_registry(&config_path, "local", "http://other:5000");
+    let result = init_registry(&config_path, "local", "http://other:5000");
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("already exists"));
 }
 
 #[test]
-fn test_add_registry_creates_config_if_not_exists() {
+fn test_init_registry_creates_config_if_not_exists() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
-    let result = add_registry(&config_path, "local", "http://localhost:5000");
+    let result = init_registry(&config_path, "local", "http://localhost:5000");
     assert!(result.is_ok());
     assert!(config_path.exists());
 
@@ -363,14 +363,14 @@ fn test_add_registry_creates_config_if_not_exists() {
 }
 
 #[test]
-fn test_add_registry_normalizes_url() {
+fn test_init_registry_normalizes_url() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
     let config = Config::default();
     config.save(&config_path).unwrap();
 
-    let result = add_registry(&config_path, "local", "localhost:5000");
+    let result = init_registry(&config_path, "local", "localhost:5000");
     assert!(result.is_ok());
 
     let loaded = Config::load(&config_path).unwrap();
@@ -379,14 +379,14 @@ fn test_add_registry_normalizes_url() {
 }
 
 #[test]
-fn test_add_first_registry_sets_default() {
+fn test_init_first_registry_sets_default() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
     let config = Config::default();
     config.save(&config_path).unwrap();
 
-    let result = add_registry(&config_path, "local", "http://localhost:5000");
+    let result = init_registry(&config_path, "local", "http://localhost:5000");
     assert!(result.is_ok());
 
     let loaded = Config::load(&config_path).unwrap();
@@ -394,7 +394,7 @@ fn test_add_first_registry_sets_default() {
 }
 
 #[test]
-fn test_add_second_registry_does_not_change_default() {
+fn test_init_second_registry_does_not_change_default() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
@@ -406,7 +406,7 @@ fn test_add_second_registry_does_not_change_default() {
     });
     config.save(&config_path).unwrap();
 
-    let result = add_registry(&config_path, "second", "http://localhost:5000");
+    let result = init_registry(&config_path, "second", "http://localhost:5000");
     assert!(result.is_ok());
 
     let loaded = Config::load(&config_path).unwrap();
