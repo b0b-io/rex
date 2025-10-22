@@ -59,7 +59,7 @@ impl Registry {
     /// use librex::client::Client;
     /// use librex::registry::Registry;
     ///
-    /// let client = Client::new("http://localhost:5000").unwrap();
+    /// let client = Client::new("http://localhost:5000", None).unwrap();
     /// let registry = Registry::new(client, None, None);
     /// ```
     pub fn new(client: Client, cache: Option<Cache>, credentials: Option<Credentials>) -> Self {
@@ -86,7 +86,7 @@ impl Registry {
     /// # use librex::registry::Registry;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     /// let mut registry = Registry::new(client, None, None);
     ///
     /// let repos = registry.list_repositories().await?;
@@ -137,7 +137,7 @@ impl Registry {
     /// # use librex::registry::Registry;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     /// let mut registry = Registry::new(client, None, None);
     ///
     /// let tags = registry.list_tags("alpine").await?;
@@ -196,7 +196,7 @@ impl Registry {
     /// # use std::str::FromStr;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     /// let mut registry = Registry::new(client, None, None);
     /// let reference = Reference::from_str("alpine:latest")?;
     ///
@@ -290,7 +290,7 @@ impl Registry {
     /// # use std::str::FromStr;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     /// let mut registry = Registry::new(client, None, None);
     /// let digest = Digest::from_str("sha256:abc123...")?;
     ///
@@ -320,7 +320,7 @@ impl Registry {
     /// # use librex::registry::Registry;
     /// # #[tokio::main]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     /// let mut registry = Registry::new(client, None, None);
     ///
     /// match registry.check_version().await {

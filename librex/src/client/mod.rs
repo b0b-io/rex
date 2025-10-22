@@ -131,6 +131,8 @@ pub struct Client {
     http_client: ReqwestClient,
     /// Base registry URL (e.g., "https://registry.example.com")
     registry_url: String,
+    /// Optional credentials for authenticated requests
+    credentials: Option<crate::auth::Credentials>,
 }
 
 impl Client {
@@ -145,16 +147,23 @@ impl Client {
     /// # Arguments
     ///
     /// * `registry_url` - The base URL of the OCI registry (e.g., "http://localhost:5000")
+    /// * `credentials` - Optional credentials for authenticated requests
     ///
     /// # Examples
     ///
     /// ```
     /// use librex::client::Client;
     ///
-    /// let client = Client::new("http://localhost:5000").unwrap();
+    /// // Anonymous access
+    /// let client = Client::new("http://localhost:5000", None).unwrap();
+    ///
+    /// // Authenticated access
+    /// use librex::auth::Credentials;
+    /// let creds = Credentials::basic("user", "pass");
+    /// let client = Client::new("http://localhost:5000", Some(creds)).unwrap();
     /// ```
-    pub fn new(registry_url: &str) -> Result<Self> {
-        Self::with_config(registry_url, ClientConfig::default())
+    pub fn new(registry_url: &str, credentials: Option<crate::auth::Credentials>) -> Result<Self> {
+        Self::with_config(registry_url, ClientConfig::default(), credentials)
     }
 
     /// Creates a new client for the specified registry URL with custom configuration.
@@ -163,6 +172,7 @@ impl Client {
     ///
     /// * `registry_url` - The base URL of the OCI registry (e.g., "http://localhost:5000")
     /// * `config` - Client configuration (timeout, connection pooling, etc.)
+    /// * `credentials` - Optional credentials for authenticated requests
     ///
     /// # Examples
     ///
@@ -173,9 +183,13 @@ impl Client {
     ///     .with_timeout(60)
     ///     .with_max_idle_per_host(20);
     ///
-    /// let client = Client::with_config("http://localhost:5000", config).unwrap();
+    /// let client = Client::with_config("http://localhost:5000", config, None).unwrap();
     /// ```
-    pub fn with_config(registry_url: &str, config: ClientConfig) -> Result<Self> {
+    pub fn with_config(
+        registry_url: &str,
+        config: ClientConfig,
+        credentials: Option<crate::auth::Credentials>,
+    ) -> Result<Self> {
         // Validate and normalize the registry URL
         let normalized_url = Self::normalize_url(registry_url)?;
 
@@ -189,6 +203,7 @@ impl Client {
         Ok(Self {
             http_client,
             registry_url: normalized_url,
+            credentials,
         })
     }
 
@@ -231,7 +246,7 @@ impl Client {
     /// use librex::client::Client;
     ///
     /// # async fn example() -> librex::error::Result<()> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     /// let version = client.check_version().await?;
     /// if let Some(api_version) = version.api_version {
     ///     println!("Registry API version: {}", api_version);
@@ -252,59 +267,12 @@ impl Client {
     /// - The registry does not support the OCI Distribution Specification
     /// - Authentication is required but not provided
     pub async fn check_version(&self) -> Result<RegistryVersion> {
-        self.check_version_with_credentials(None).await
-    }
-
-    /// Checks if the registry supports the OCI Distribution Specification v2 API with optional credentials.
-    ///
-    /// This method performs a GET request to the `/v2/` endpoint with optional Basic authentication.
-    /// It can be used to verify credentials or check if a registry requires authentication.
-    ///
-    /// # Arguments
-    ///
-    /// * `credentials` - Optional credentials for authentication
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use librex::client::Client;
-    /// use librex::auth::Credentials;
-    ///
-    /// # async fn example() -> librex::error::Result<()> {
-    /// let client = Client::new("http://localhost:5000")?;
-    ///
-    /// // Check without credentials
-    /// let version = client.check_version_with_credentials(None).await?;
-    ///
-    /// // Check with credentials
-    /// let creds = Credentials::basic("user", "pass");
-    /// let version = client.check_version_with_credentials(Some(&creds)).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// # Returns
-    ///
-    /// Returns `RegistryVersion` containing:
-    /// - `api_version`: The Docker-Distribution-API-Version header value (typically "registry/2.0")
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The registry is unreachable
-    /// - The registry does not support the OCI Distribution Specification
-    /// - Authentication is required but invalid credentials were provided
-    /// - Authentication fails (401 or 403)
-    pub async fn check_version_with_credentials(
-        &self,
-        credentials: Option<&crate::auth::Credentials>,
-    ) -> Result<RegistryVersion> {
         let url = format!("{}/v2/", self.registry_url);
 
         let mut request = self.http_client.get(&url);
 
-        // Add Authorization header if credentials are provided
-        if let Some(creds) = credentials
+        // Add Authorization header if credentials are present
+        if let Some(ref creds) = self.credentials
             && let Some(auth_header) = creds.to_header_value()
         {
             request = request.header("Authorization", auth_header);
@@ -339,7 +307,7 @@ impl Client {
     /// use librex::client::Client;
     ///
     /// # async fn example() -> librex::error::Result<()> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     /// let repositories = client.fetch_catalog().await?;
     /// for repo in repositories {
     ///     println!("{}", repo);
@@ -374,7 +342,7 @@ impl Client {
     /// use librex::client::Client;
     ///
     /// # async fn example() -> librex::error::Result<()> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     ///
     /// // Fetch all repositories
     /// let all_repos = client.fetch_catalog_paginated(None).await?;
@@ -394,9 +362,16 @@ impl Client {
         }
 
         loop {
-            let response = self
-                .http_client
-                .get(&url)
+            let mut request = self.http_client.get(&url);
+
+            // Add Authorization header if credentials are present
+            if let Some(ref creds) = self.credentials
+                && let Some(auth_header) = creds.to_header_value()
+            {
+                request = request.header("Authorization", auth_header);
+            }
+
+            let response = request
                 .send()
                 .await
                 .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;
@@ -440,7 +415,7 @@ impl Client {
     /// use librex::client::Client;
     ///
     /// # async fn example() -> librex::error::Result<()> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     /// let tags = client.fetch_tags("alpine").await?;
     /// for tag in tags {
     ///     println!("{}", tag);
@@ -477,7 +452,7 @@ impl Client {
     /// use librex::client::Client;
     ///
     /// # async fn example() -> librex::error::Result<()> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     ///
     /// // Fetch all tags
     /// let all_tags = client.fetch_tags_paginated("alpine", None).await?;
@@ -501,9 +476,16 @@ impl Client {
         }
 
         loop {
-            let response = self
-                .http_client
-                .get(&url)
+            let mut request = self.http_client.get(&url);
+
+            // Add Authorization header if credentials are present
+            if let Some(ref creds) = self.credentials
+                && let Some(auth_header) = creds.to_header_value()
+            {
+                request = request.header("Authorization", auth_header);
+            }
+
+            let response = request
                 .send()
                 .await
                 .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;
@@ -555,7 +537,7 @@ impl Client {
     /// use librex::client::Client;
     ///
     /// # async fn example() -> librex::error::Result<()> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     ///
     /// // Fetch by tag
     /// let (manifest_bytes, digest) = client.fetch_manifest("alpine", "latest").await?;
@@ -592,7 +574,7 @@ impl Client {
             self.registry_url, repository, reference
         );
 
-        let response = self
+        let mut request = self
             .http_client
             .get(&url)
             // Add Accept headers for OCI and Docker manifest types
@@ -602,7 +584,16 @@ impl Client {
                  application/vnd.oci.image.index.v1+json, \
                  application/vnd.docker.distribution.manifest.v2+json, \
                  application/vnd.docker.distribution.manifest.list.v2+json",
-            )
+            );
+
+        // Add Authorization header if credentials are present
+        if let Some(ref creds) = self.credentials
+            && let Some(auth_header) = creds.to_header_value()
+        {
+            request = request.header("Authorization", auth_header);
+        }
+
+        let response = request
             .send()
             .await
             .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;
@@ -644,7 +635,7 @@ impl Client {
     /// use std::str::FromStr;
     ///
     /// # async fn example() -> librex::error::Result<()> {
-    /// let client = Client::new("http://localhost:5000")?;
+    /// let client = Client::new("http://localhost:5000", None)?;
     ///
     /// // Fetch a blob by digest
     /// let blob_data = client.fetch_blob(
@@ -674,9 +665,16 @@ impl Client {
 
         let url = format!("{}/v2/{}/blobs/{}", self.registry_url, repository, digest);
 
-        let response = self
-            .http_client
-            .get(&url)
+        let mut request = self.http_client.get(&url);
+
+        // Add Authorization header if credentials are present
+        if let Some(ref creds) = self.credentials
+            && let Some(auth_header) = creds.to_header_value()
+        {
+            request = request.header("Authorization", auth_header);
+        }
+
+        let response = request
             .send()
             .await
             .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;

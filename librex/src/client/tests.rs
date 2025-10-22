@@ -2,62 +2,62 @@ use super::*;
 
 #[test]
 fn test_client_new_with_valid_url() {
-    let client = Client::new("http://localhost:5000");
+    let client = Client::new("http://localhost:5000", None);
     assert!(client.is_ok());
 }
 
 #[test]
 fn test_client_new_with_https_url() {
-    let client = Client::new("https://registry.example.com");
+    let client = Client::new("https://registry.example.com", None);
     assert!(client.is_ok());
 }
 
 #[test]
 fn test_client_normalizes_url_without_scheme() {
-    let client = Client::new("localhost:5000").unwrap();
+    let client = Client::new("localhost:5000", None).unwrap();
     assert_eq!(client.registry_url(), "http://localhost:5000");
 }
 
 #[test]
 fn test_client_removes_trailing_slash() {
-    let client = Client::new("http://localhost:5000/").unwrap();
+    let client = Client::new("http://localhost:5000/", None).unwrap();
     assert_eq!(client.registry_url(), "http://localhost:5000");
 }
 
 #[test]
 fn test_client_removes_multiple_trailing_slashes() {
-    let client = Client::new("http://localhost:5000///").unwrap();
+    let client = Client::new("http://localhost:5000///", None).unwrap();
     assert_eq!(client.registry_url(), "http://localhost:5000");
 }
 
 #[test]
 fn test_client_new_with_empty_url_fails() {
-    let client = Client::new("");
+    let client = Client::new("", None);
     assert!(client.is_err());
     assert!(matches!(client.unwrap_err(), RexError::Validation { .. }));
 }
 
 #[test]
 fn test_client_new_with_whitespace_url_fails() {
-    let client = Client::new("   ");
+    let client = Client::new("   ", None);
     assert!(client.is_err());
 }
 
 #[test]
 fn test_client_registry_url_accessor() {
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     assert_eq!(client.registry_url(), "http://localhost:5000");
 }
 
 #[test]
 fn test_client_with_port() {
-    let client = Client::new("localhost:8080").unwrap();
+    let client = Client::new("localhost:8080", None).unwrap();
     assert_eq!(client.registry_url(), "http://localhost:8080");
 }
 
 #[test]
 fn test_client_with_domain() {
-    let client = Client::new("registry.example.com").unwrap();
+    let client = Client::new("registry.example.com", None).unwrap();
     assert_eq!(client.registry_url(), "http://registry.example.com");
 }
 
@@ -66,7 +66,7 @@ fn test_client_with_domain() {
 
 #[test]
 fn test_url_construction_for_version_check() {
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     // Verify the URL would be correct for version check
     assert_eq!(client.registry_url(), "http://localhost:5000");
     // The version check uses: format!("{}/v2/", client.registry_url())
@@ -77,7 +77,7 @@ fn test_url_construction_for_version_check() {
 fn test_client_has_async_check_version_method() {
     // This test just verifies the method exists and can be called
     // Integration testing with a real registry will be done later
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     // The method signature is: pub async fn check_version(&self) -> Result<RegistryVersion>
     // We can't easily test async functions without a runtime or test registry,
     // so we just verify the client was created successfully
@@ -166,7 +166,7 @@ fn test_client_with_custom_config() {
         .with_timeout(60)
         .with_max_idle_per_host(20);
 
-    let client = Client::with_config("http://localhost:5000", config);
+    let client = Client::with_config("http://localhost:5000", config, None);
     assert!(client.is_ok());
     assert_eq!(client.unwrap().registry_url(), "http://localhost:5000");
 }
@@ -174,7 +174,7 @@ fn test_client_with_custom_config() {
 #[test]
 fn test_client_new_uses_default_config() {
     // Verify that Client::new() still works and uses defaults
-    let client = Client::new("http://localhost:5000");
+    let client = Client::new("http://localhost:5000", None);
     assert!(client.is_ok());
 }
 
@@ -201,7 +201,7 @@ fn test_catalog_response_empty() {
 
 #[test]
 fn test_catalog_url_construction() {
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     // The catalog endpoint URL would be: "http://localhost:5000/v2/_catalog"
     assert_eq!(client.registry_url(), "http://localhost:5000");
 }
@@ -283,7 +283,7 @@ fn test_tags_response_empty() {
 
 #[test]
 fn test_tags_url_construction() {
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     // The tags endpoint URL would be: "http://localhost:5000/v2/{name}/tags/list"
     assert_eq!(client.registry_url(), "http://localhost:5000");
 }
@@ -305,21 +305,21 @@ fn test_tags_response_with_special_characters() {
 
 #[test]
 fn test_manifest_url_construction() {
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     // The manifest endpoint URL would be: "http://localhost:5000/v2/{name}/manifests/{reference}"
     assert_eq!(client.registry_url(), "http://localhost:5000");
 }
 
 #[test]
 fn test_manifest_url_with_tag_reference() {
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     // Should construct: "http://localhost:5000/v2/alpine/manifests/latest"
     assert_eq!(client.registry_url(), "http://localhost:5000");
 }
 
 #[test]
 fn test_manifest_url_with_digest_reference() {
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     // Should construct: "http://localhost:5000/v2/alpine/manifests/sha256:abc123..."
     assert_eq!(client.registry_url(), "http://localhost:5000");
 }
@@ -345,7 +345,7 @@ fn test_manifest_accept_headers() {
 
 #[test]
 fn test_blob_url_construction() {
-    let client = Client::new("http://localhost:5000").unwrap();
+    let client = Client::new("http://localhost:5000", None).unwrap();
     // The blob endpoint URL would be: "http://localhost:5000/v2/{name}/blobs/{digest}"
     assert_eq!(client.registry_url(), "http://localhost:5000");
 }

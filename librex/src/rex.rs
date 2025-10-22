@@ -145,7 +145,7 @@ impl Rex {
     /// }
     /// ```
     pub async fn connect(registry_url: &str) -> Result<Self> {
-        let client = Client::new(registry_url)?;
+        let client = Client::new(registry_url, None)?;
         let registry = Registry::new(client, None, None);
 
         Ok(Self {
@@ -667,7 +667,7 @@ impl RexBuilder {
             .registry_url
             .ok_or_else(|| crate::error::RexError::validation("Registry URL is required"))?;
 
-        let client = Client::new(&registry_url)?;
+        let client = Client::new(&registry_url, self.credentials.clone())?;
 
         // Create cache if specified
         let cache = if let Some(cache_dir) = self.cache_dir {
