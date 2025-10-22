@@ -33,6 +33,21 @@ enum Commands {
         #[command(subcommand)]
         command: RegistryCommands,
     },
+    /// Explore images and their details
+    Image {
+        /// Output format: pretty, json, yaml
+        #[arg(short, long, default_value = "pretty")]
+        format: String,
+        /// Show only image names
+        #[arg(short, long)]
+        quiet: bool,
+        /// Filter images by pattern (supports fuzzy matching)
+        #[arg(long)]
+        filter: Option<String>,
+        /// Limit number of results
+        #[arg(long)]
+        limit: Option<usize>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -178,5 +193,15 @@ async fn main() {
                 commands::registry::handlers::handle_registry_logout(&name);
             }
         },
+        Commands::Image {
+            format,
+            quiet,
+            filter,
+            limit,
+        } => {
+            let fmt = format::OutputFormat::from(format.as_str());
+            commands::image::handlers::handle_image_list(fmt, quiet, filter.as_deref(), limit)
+                .await;
+        }
     }
 }

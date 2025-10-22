@@ -1,0 +1,69 @@
+use super::*;
+use crate::format::OutputFormat;
+
+/// Handle the image list command
+pub async fn handle_image_list(
+    format: OutputFormat,
+    quiet: bool,
+    filter: Option<&str>,
+    limit: Option<usize>,
+) {
+    // Get registry URL from config
+    let registry_url = match get_registry_url() {
+        Ok(url) => url,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // List images
+    let images = match list_images(&registry_url, filter, limit).await {
+        Ok(imgs) => imgs,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Handle quiet mode
+    if quiet {
+        for image in images {
+            println!("{}", image.name);
+        }
+        return;
+    }
+
+    // Handle empty results
+    if images.is_empty() {
+        println!("No images found.");
+        return;
+    }
+
+    // Format output
+    match format {
+        OutputFormat::Pretty => {
+            use tabled::Table;
+            let table = Table::new(&images).to_string();
+            println!("{}", table);
+        }
+        OutputFormat::Json => match serde_json::to_string_pretty(&images) {
+            Ok(json) => println!("{}", json),
+            Err(e) => {
+                eprintln!("Error formatting JSON: {}", e);
+                std::process::exit(1);
+            }
+        },
+        OutputFormat::Yaml => match serde_yaml::to_string(&images) {
+            Ok(yaml) => print!("{}", yaml),
+            Err(e) => {
+                eprintln!("Error formatting YAML: {}", e);
+                std::process::exit(1);
+            }
+        },
+    }
+}
+
+#[cfg(test)]
+#[path = "handlers_tests.rs"]
+mod tests;
