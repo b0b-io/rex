@@ -56,3 +56,26 @@ fn test_get_registry_url_default() {
     let url = result.unwrap();
     assert!(!url.is_empty());
 }
+
+#[test]
+fn test_tag_info_creation() {
+    let tag = TagInfo::new("latest".to_string());
+
+    assert_eq!(tag.tag, "latest");
+}
+
+#[test]
+fn test_tag_info_format_pretty() {
+    let tag = TagInfo::new("v1.2.3".to_string());
+
+    let formatted = tag.format_pretty();
+    assert_eq!(formatted, "v1.2.3");
+}
+
+#[test]
+fn test_tag_info_serialization() {
+    let tag = TagInfo::new("3.19".to_string());
+
+    let json = serde_json::to_string(&tag).unwrap();
+    assert!(json.contains("\"tag\":\"3.19\""));
+}
