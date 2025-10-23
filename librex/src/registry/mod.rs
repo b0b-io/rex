@@ -12,7 +12,6 @@ use crate::digest::Digest;
 use crate::error::Result;
 use crate::oci::ManifestOrIndex;
 use crate::reference::Reference;
-use oci_spec::image::ImageManifest;
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
@@ -148,7 +147,7 @@ impl Registry {
     /// # }
     /// ```
     pub async fn list_tags(&mut self, repository: &str) -> Result<Vec<String>> {
-        let cache_key = format!("{}/tags", repository);
+        let cache_key = format!("{}/_tags", repository);
 
         // Try cache first
         if let Some(cache) = &mut self.cache
@@ -225,19 +224,14 @@ impl Registry {
             )
         };
 
-        // Try cache first - we need to try both manifest and index types
+        // Try cache first - cache stores raw bytes which we parse
         // Note: Both digest and tag references are cached, but with different TTLs
         // - Digest-based: Long TTL (immutable content)
         // - Tag-based: Shorter TTL via CacheType::Manifest (content can change)
-        if let Some(cache) = &mut self.cache {
-            // Try as ImageManifest first
-            if let Some(cached) = cache.get::<ImageManifest>(&cache_key)? {
-                return Ok(ManifestOrIndex::Manifest(cached));
-            }
-            // Try as ImageIndex
-            if let Some(cached) = cache.get::<oci_spec::image::ImageIndex>(&cache_key)? {
-                return Ok(ManifestOrIndex::Index(cached));
-            }
+        if let Some(cache) = &mut self.cache
+            && let Some(cached_bytes) = cache.get::<Vec<u8>>(&cache_key)?
+        {
+            return ManifestOrIndex::from_bytes(&cached_bytes);
         }
 
         // Fetch from registry - client returns (Vec<u8>, String) tuple
@@ -255,16 +249,9 @@ impl Registry {
         // Parse the manifest or index
         let manifest_or_index = ManifestOrIndex::from_bytes(&manifest_bytes)?;
 
-        // Cache the result (with appropriate TTL based on reference type)
+        // Cache the raw bytes (not the parsed struct)
         if let Some(cache) = &mut self.cache {
-            match &manifest_or_index {
-                ManifestOrIndex::Manifest(m) => {
-                    cache.set(&cache_key, m, CacheType::Manifest)?;
-                }
-                ManifestOrIndex::Index(i) => {
-                    cache.set(&cache_key, i, CacheType::Manifest)?;
-                }
-            }
+            cache.set(&cache_key, &manifest_bytes, CacheType::Manifest)?;
         }
 
         Ok(manifest_or_index)

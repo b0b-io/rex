@@ -204,15 +204,21 @@ async fn main() {
         } => {
             let fmt = format::OutputFormat::from(format.as_str());
             if let Some(image_name) = name {
-                // List tags for specific image
-                commands::image::handlers::handle_image_tags(
-                    image_name.as_str(),
-                    fmt,
-                    quiet,
-                    filter.as_deref(),
-                    limit,
-                )
-                .await;
+                // Check if it's a full reference (contains : or @)
+                if image_name.contains(':') || image_name.contains('@') {
+                    // Show details for specific image:tag or image@digest
+                    commands::image::handlers::handle_image_details(image_name.as_str(), fmt).await;
+                } else {
+                    // List tags for specific image
+                    commands::image::handlers::handle_image_tags(
+                        image_name.as_str(),
+                        fmt,
+                        quiet,
+                        filter.as_deref(),
+                        limit,
+                    )
+                    .await;
+                }
             } else {
                 // List all images
                 commands::image::handlers::handle_image_list(fmt, quiet, filter.as_deref(), limit)
