@@ -143,3 +143,113 @@ fn test_cache_prune() {
     assert_eq!(stats.removed_files, 1);
     assert!(stats.reclaimed_space > 0);
 }
+
+#[test]
+fn test_cache_clear() {
+    let temp_dir = tempdir().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    // Add multiple entries
+    cache
+        .set("key1", &"data1".to_string(), CacheType::Tags)
+        .unwrap();
+    cache
+        .set("key2", &"data2".to_string(), CacheType::Catalog)
+        .unwrap();
+    cache
+        .set("key3", &"data3".to_string(), CacheType::Manifest)
+        .unwrap();
+
+    // Verify entries exist
+    assert!(cache.memory.len() > 0);
+    let key1_path = cache.key_to_path("key1").unwrap();
+    let key2_path = cache.key_to_path("key2").unwrap();
+    let key3_path = cache.key_to_path("key3").unwrap();
+    assert!(key1_path.exists());
+    assert!(key2_path.exists());
+    assert!(key3_path.exists());
+
+    // Clear the cache
+    let stats = cache.clear().unwrap();
+
+    // Assert memory cache is empty
+    assert_eq!(cache.memory.len(), 0);
+
+    // Assert disk files are removed
+    assert!(!key1_path.exists());
+    assert!(!key2_path.exists());
+    assert!(!key3_path.exists());
+
+    // Assert stats are correct
+    assert_eq!(stats.removed_files, 3);
+    assert!(stats.reclaimed_space > 0);
+}
+
+#[test]
+fn test_cache_stats() {
+    let temp_dir = tempdir().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    // Initially empty
+    let stats = cache.stats().unwrap();
+    assert_eq!(stats.disk_entries, 0);
+    assert_eq!(stats.disk_size, 0);
+    assert_eq!(stats.memory_entries, 0);
+
+    // Add entries
+    cache
+        .set("key1", &"data1".to_string(), CacheType::Tags)
+        .unwrap();
+    cache
+        .set("key2", &"data2".to_string(), CacheType::Catalog)
+        .unwrap();
+    cache
+        .set("key3", &"data3".to_string(), CacheType::Manifest)
+        .unwrap();
+
+    // Check stats
+    let stats = cache.stats().unwrap();
+    assert_eq!(stats.disk_entries, 3);
+    assert!(stats.disk_size > 0);
+    assert_eq!(stats.memory_entries, 3);
+
+    // Clear memory cache only
+    cache.memory.clear();
+
+    // Check stats again
+    let stats = cache.stats().unwrap();
+    assert_eq!(stats.disk_entries, 3);
+    assert!(stats.disk_size > 0);
+    assert_eq!(stats.memory_entries, 0);
+}
+
+#[test]
+fn test_cache_clear_empty() {
+    let temp_dir = tempdir().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    // Clear empty cache should not fail
+    let stats = cache.clear().unwrap();
+    assert_eq!(stats.removed_files, 0);
+    assert_eq!(stats.reclaimed_space, 0);
+}
+
+#[test]
+fn test_cache_stats_empty() {
+    let temp_dir = tempdir().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    // Stats for empty cache
+    let stats = cache.stats().unwrap();
+    assert_eq!(stats.disk_entries, 0);
+    assert_eq!(stats.disk_size, 0);
+    assert_eq!(stats.memory_entries, 0);
+}

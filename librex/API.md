@@ -137,6 +137,33 @@ Configuration settings for Rex.
 - `from_yaml_str(yaml)` - Parse from YAML string
 - Load/save from files
 
+### Cache Statistics Types
+
+#### `CacheStats`
+
+Statistics about the current cache state.
+
+**Fields:**
+- `disk_entries: u64` - Number of entries in disk cache
+- `disk_size: u64` - Total size of disk cache in bytes
+- `memory_entries: u64` - Number of entries in memory cache
+
+#### `PruneStats`
+
+Statistics returned after a cache prune operation.
+
+**Fields:**
+- `removed_files: u64` - Number of expired files removed
+- `reclaimed_space: u64` - Total disk space reclaimed in bytes
+
+#### `ClearStats`
+
+Statistics returned after a cache clear operation.
+
+**Fields:**
+- `removed_files: u64` - Number of files removed
+- `reclaimed_space: u64` - Total disk space reclaimed in bytes
+
 ## Examples
 
 ### Basic Connection

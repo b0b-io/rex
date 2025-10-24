@@ -45,6 +45,26 @@ pub struct PruneStats {
     pub reclaimed_space: u64,
 }
 
+/// Statistics about the cache.
+#[derive(Debug, Default)]
+pub struct CacheStats {
+    /// Total number of entries in disk cache.
+    pub disk_entries: u64,
+    /// Total size of disk cache in bytes.
+    pub disk_size: u64,
+    /// Number of entries in memory cache.
+    pub memory_entries: u64,
+}
+
+/// Statistics returned after a clear operation.
+#[derive(Debug, Default)]
+pub struct ClearStats {
+    /// The number of files removed.
+    pub removed_files: u64,
+    /// The total disk space reclaimed in bytes.
+    pub reclaimed_space: u64,
+}
+
 /// Manages the L1 (memory) and L2 (disk) caches.
 pub struct Cache {
     /// The L1 in-memory cache.
@@ -191,6 +211,68 @@ impl Cache {
                 if std::fs::remove_file(path).is_ok() {
                     stats.removed_files += 1;
                 }
+            }
+        }
+
+        Ok(stats)
+    }
+
+    /// Clears all cache entries from disk and memory.
+    pub fn clear(&mut self) -> Result<ClearStats> {
+        let mut stats = ClearStats::default();
+
+        // Clear L1 memory cache
+        self.memory.clear();
+
+        // Clear L2 disk cache
+        if !self.disk_path.exists() {
+            return Ok(stats);
+        }
+
+        for entry in WalkDir::new(&self.disk_path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            if !entry.file_type().is_file() {
+                continue;
+            }
+
+            let path = entry.path();
+            if let Ok(metadata) = std::fs::metadata(path) {
+                stats.reclaimed_space += metadata.len();
+            }
+            if std::fs::remove_file(path).is_ok() {
+                stats.removed_files += 1;
+            }
+        }
+
+        Ok(stats)
+    }
+
+    /// Gets statistics about the cache.
+    pub fn stats(&self) -> Result<CacheStats> {
+        let mut stats = CacheStats {
+            memory_entries: self.memory.len() as u64,
+            ..Default::default()
+        };
+
+        // Walk disk cache
+        if !self.disk_path.exists() {
+            return Ok(stats);
+        }
+
+        for entry in WalkDir::new(&self.disk_path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            if !entry.file_type().is_file() {
+                continue;
+            }
+
+            let path = entry.path();
+            if let Ok(metadata) = std::fs::metadata(path) {
+                stats.disk_entries += 1;
+                stats.disk_size += metadata.len();
             }
         }
 
