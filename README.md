@@ -15,9 +15,11 @@ visual exploration of OCI-compliant container registries. Primary target is
 Zot registry with support for any OCI Distribution Specification v1.0+
 compliant registry.
 
-For detailed project requirements, see [docs/req.md](docs/req.md).
+For detailed project requirements, see [req.md](req.md).
 
-For architecture and design details, see [docs/design.md](docs/design.md).
+For architecture and design details:
+- [librex/design.md](librex/design.md) - Core library design and architecture
+- [rex/design.md](rex/design.md) - CLI and TUI interface design
 
 ## Getting Started
 
@@ -99,14 +101,14 @@ rex/
 ├── justfile                # Command runner tasks
 ├── librex/                 # Core library crate
 │   ├── Cargo.toml
+│   ├── design.md           # Library architecture
 │   └── src/
 ├── rex/                    # CLI binary crate
 │   ├── Cargo.toml
+│   ├── design.md           # CLI and TUI design
 │   └── src/
-├── docs/                   # Documentation
-│   ├── req.md
-│   ├── design.md
-│   └── development.md
+├── req.md                  # Project requirements
+├── dev.md                  # Development conventions
 └── README.md
 ```
 
@@ -144,9 +146,10 @@ We follow conventional commits:
 
 ## Documentation
 
-- [Requirements](docs/req.md) - Detailed MVP requirements and scope
-- [Design](docs/design.md) - Architecture, module design, and CLI interface
-- [Development](docs/development.md) - Development guidelines and practices
+- [Requirements](req.md) - Detailed MVP requirements and scope
+- [librex Design](librex/design.md) - Core library architecture and modules
+- [rex Design](rex/design.md) - CLI and TUI interface design
+- [Development](dev.md) - Development guidelines and practices
 - [Public API](librex/API.md) - High-level library API documentation
 
 ## License
