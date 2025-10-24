@@ -35,12 +35,20 @@ enum Commands {
     },
     /// Explore images and their details
     Image {
-        /// Image name (repository) - if provided, lists tags for this image
-        name: Option<String>,
+        #[command(subcommand)]
+        command: ImageCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum ImageCommands {
+    /// List all images in the registry
+    #[command(visible_alias = "ls")]
+    List {
         /// Output format: pretty, json, yaml
         #[arg(short, long, default_value = "pretty")]
         format: String,
-        /// Show only names (image names or tag names)
+        /// Show only image names
         #[arg(short, long)]
         quiet: bool,
         /// Filter by pattern (supports fuzzy matching)
@@ -49,6 +57,48 @@ enum Commands {
         /// Limit number of results
         #[arg(long)]
         limit: Option<usize>,
+    },
+    /// List tags for a specific image
+    Tags {
+        /// Image name (repository)
+        name: String,
+        /// Output format: pretty, json, yaml
+        #[arg(short, long, default_value = "pretty")]
+        format: String,
+        /// Show only tag names
+        #[arg(short, long)]
+        quiet: bool,
+        /// Filter by pattern (supports fuzzy matching)
+        #[arg(long)]
+        filter: Option<String>,
+        /// Limit number of results
+        #[arg(long)]
+        limit: Option<usize>,
+    },
+    /// Show brief details about an image
+    Show {
+        /// Image reference (name:tag or name@digest)
+        reference: String,
+        /// Output format: pretty, json, yaml
+        #[arg(short, long, default_value = "pretty")]
+        format: String,
+    },
+    /// Show complete detailed inspection of an image
+    Inspect {
+        /// Image reference (name:tag or name@digest)
+        reference: String,
+        /// Output format: pretty, json, yaml
+        #[arg(short, long, default_value = "pretty")]
+        format: String,
+        /// Inspect specific platform (for multi-arch images)
+        #[arg(long)]
+        platform: Option<String>,
+        /// Show raw manifest JSON
+        #[arg(long)]
+        raw_manifest: bool,
+        /// Show raw config JSON
+        #[arg(long)]
+        raw_config: bool,
     },
 }
 
@@ -195,35 +245,55 @@ async fn main() {
                 commands::registry::handlers::handle_registry_logout(&name);
             }
         },
-        Commands::Image {
-            name,
-            format,
-            quiet,
-            filter,
-            limit,
-        } => {
-            let fmt = format::OutputFormat::from(format.as_str());
-            if let Some(image_name) = name {
-                // Check if it's a full reference (contains : or @)
-                if image_name.contains(':') || image_name.contains('@') {
-                    // Show details for specific image:tag or image@digest
-                    commands::image::handlers::handle_image_details(image_name.as_str(), fmt).await;
-                } else {
-                    // List tags for specific image
-                    commands::image::handlers::handle_image_tags(
-                        image_name.as_str(),
-                        fmt,
-                        quiet,
-                        filter.as_deref(),
-                        limit,
-                    )
-                    .await;
-                }
-            } else {
-                // List all images
+        Commands::Image { command } => match command {
+            ImageCommands::List {
+                format,
+                quiet,
+                filter,
+                limit,
+            } => {
+                let fmt = format::OutputFormat::from(format.as_str());
                 commands::image::handlers::handle_image_list(fmt, quiet, filter.as_deref(), limit)
                     .await;
             }
-        }
+            ImageCommands::Tags {
+                name,
+                format,
+                quiet,
+                filter,
+                limit,
+            } => {
+                let fmt = format::OutputFormat::from(format.as_str());
+                commands::image::handlers::handle_image_tags(
+                    name.as_str(),
+                    fmt,
+                    quiet,
+                    filter.as_deref(),
+                    limit,
+                )
+                .await;
+            }
+            ImageCommands::Show { reference, format } => {
+                let fmt = format::OutputFormat::from(format.as_str());
+                commands::image::handlers::handle_image_details(reference.as_str(), fmt).await;
+            }
+            ImageCommands::Inspect {
+                reference,
+                format,
+                platform,
+                raw_manifest,
+                raw_config,
+            } => {
+                let fmt = format::OutputFormat::from(format.as_str());
+                commands::image::handlers::handle_image_inspect(
+                    reference.as_str(),
+                    fmt,
+                    platform.as_deref(),
+                    raw_manifest,
+                    raw_config,
+                )
+                .await;
+            }
+        },
     }
 }

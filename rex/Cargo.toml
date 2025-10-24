@@ -25,4 +25,5 @@ rpassword = "7.4"
 
 [dev-dependencies]
 tempfile = "3.23.0"
+mockito = "1.6.1"
 # Test dependencies will be added as needed

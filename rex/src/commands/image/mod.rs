@@ -134,6 +134,204 @@ impl Formattable for ImageDetails {
     }
 }
 
+/// Layer information for detailed inspection
+#[derive(Debug, Serialize)]
+pub struct LayerInfo {
+    pub digest: String,
+    pub size: u64,
+    pub media_type: String,
+}
+
+/// History entry for image inspection
+#[derive(Debug, Serialize)]
+pub struct HistoryEntry {
+    pub created: Option<String>,
+    pub created_by: Option<String>,
+    pub empty_layer: bool,
+}
+
+/// Complete inspection data for an image
+#[derive(Debug, Serialize)]
+pub struct ImageInspect {
+    /// Full reference (name:tag or name@digest)
+    pub reference: String,
+    /// Registry URL
+    pub registry: String,
+    /// Manifest digest
+    pub manifest_digest: String,
+    /// Manifest type
+    pub manifest_type: String,
+    /// Config digest
+    pub config_digest: String,
+    /// Total size in bytes
+    pub size: u64,
+    /// Architecture
+    pub architecture: String,
+    /// Operating system
+    pub os: String,
+    /// Created timestamp
+    pub created: Option<String>,
+    /// Environment variables
+    pub env: Vec<String>,
+    /// Entrypoint
+    pub entrypoint: Option<Vec<String>>,
+    /// Command
+    pub cmd: Option<Vec<String>>,
+    /// Working directory
+    pub working_dir: Option<String>,
+    /// User
+    pub user: Option<String>,
+    /// Labels
+    pub labels: std::collections::HashMap<String, String>,
+    /// Exposed ports
+    pub exposed_ports: Vec<String>,
+    /// Volumes
+    pub volumes: Vec<String>,
+    /// Layers with details
+    pub layers: Vec<LayerInfo>,
+    /// History entries
+    pub history: Vec<HistoryEntry>,
+    /// RootFS diff IDs
+    pub rootfs_diff_ids: Vec<String>,
+}
+
+impl Formattable for ImageInspect {
+    fn format_pretty(&self) -> String {
+        fn format_bytes(bytes: u64) -> String {
+            const KB: u64 = 1024;
+            const MB: u64 = KB * 1024;
+            const GB: u64 = MB * 1024;
+
+            if bytes >= GB {
+                format!("{:.2} GB", bytes as f64 / GB as f64)
+            } else if bytes >= MB {
+                format!("{:.2} MB", bytes as f64 / MB as f64)
+            } else if bytes >= KB {
+                format!("{:.2} KB", bytes as f64 / KB as f64)
+            } else {
+                format!("{} B", bytes)
+            }
+        }
+
+        let mut output = String::new();
+
+        // Basic info
+        output.push_str(&format!("Image: {}\n", self.reference));
+        output.push_str(&format!("Digest: {}\n", self.manifest_digest));
+        output.push_str(&format!("Registry: {}\n", self.registry));
+        output.push_str(&format!("Type: {}\n", self.manifest_type));
+        output.push_str(&format!("Total Size: {}\n", format_bytes(self.size)));
+        output.push('\n');
+
+        output.push_str(&format!("Manifest Digest: {}\n", self.manifest_digest));
+        output.push_str(&format!("Config Digest: {}\n", self.config_digest));
+        output.push('\n');
+
+        // Configuration
+        output.push_str("Configuration:\n");
+        output.push_str(&format!("  Architecture: {}\n", self.architecture));
+        output.push_str(&format!("  OS: {}\n", self.os));
+        if let Some(created) = &self.created {
+            output.push_str(&format!("  Created: {}\n", created));
+        }
+        output.push('\n');
+
+        // Config details
+        output.push_str("  Config:\n");
+        if let Some(user) = &self.user {
+            output.push_str(&format!("    User: {}\n", user));
+        } else {
+            output.push_str("    User: (empty)\n");
+        }
+
+        if !self.env.is_empty() {
+            output.push_str("    Env:\n");
+            for env in &self.env {
+                output.push_str(&format!("      - {}\n", env));
+            }
+        }
+
+        if let Some(entrypoint) = &self.entrypoint {
+            output.push_str("    Entrypoint:\n");
+            for entry in entrypoint {
+                output.push_str(&format!("      - {}\n", entry));
+            }
+        }
+
+        if let Some(cmd) = &self.cmd {
+            output.push_str("    Cmd:\n");
+            for c in cmd {
+                output.push_str(&format!("      - {}\n", c));
+            }
+        }
+
+        if let Some(wd) = &self.working_dir {
+            output.push_str(&format!("    WorkingDir: {}\n", wd));
+        }
+
+        if !self.exposed_ports.is_empty() {
+            output.push_str("    ExposedPorts:\n");
+            for port in &self.exposed_ports {
+                output.push_str(&format!("      - {}\n", port));
+            }
+        }
+
+        if !self.volumes.is_empty() {
+            output.push_str("    Volumes:\n");
+            for vol in &self.volumes {
+                output.push_str(&format!("      - {}\n", vol));
+            }
+        }
+
+        if !self.labels.is_empty() {
+            output.push_str("\n  Labels:\n");
+            for (key, value) in &self.labels {
+                output.push_str(&format!("    {}: {}\n", key, value));
+            }
+        }
+
+        // Layers
+        output.push_str(&format!("\nLayers ({}):\n", self.layers.len()));
+        for (i, layer) in self.layers.iter().enumerate() {
+            output.push_str(&format!("  {}. {}\n", i + 1, layer.digest));
+            output.push_str(&format!(
+                "     Size: {} ({})\n",
+                format_bytes(layer.size),
+                layer.size
+            ));
+            output.push_str(&format!("     Media Type: {}\n", layer.media_type));
+        }
+
+        // History
+        if !self.history.is_empty() {
+            output.push_str(&format!("\nHistory ({} entries):\n", self.history.len()));
+            for (i, entry) in self.history.iter().enumerate() {
+                output.push_str(&format!("  {}. ", i + 1));
+                if let Some(created) = &entry.created {
+                    output.push_str(&format!("Created: {}", created));
+                }
+                if entry.empty_layer {
+                    output.push_str(" (empty layer)");
+                }
+                output.push('\n');
+                if let Some(created_by) = &entry.created_by {
+                    output.push_str(&format!("     {}\n", created_by));
+                }
+            }
+        }
+
+        // RootFS
+        output.push_str("\nRootFS:\n");
+        output.push_str("  Type: layers\n");
+        output.push_str("  DiffIDs:\n");
+        for diff_id in &self.rootfs_diff_ids {
+            output.push_str(&format!("    - {}\n", diff_id));
+        }
+
+        output
+    }
+}
+
 /// List all repositories (images) in a registry
 ///
 /// # Arguments
@@ -421,6 +619,211 @@ pub(crate) async fn get_image_details(
         platforms,
         layers,
     ))
+}
+
+/// Get complete inspection details for a specific image reference
+///
+/// # Arguments
+///
+/// * `registry_url` - URL of the registry to query
+/// * `reference_str` - Full image reference (e.g., "alpine:latest" or "alpine@sha256:...")
+///
+/// # Returns
+///
+/// Returns ImageInspect with complete manifest, config, layers, and history information
+pub(crate) async fn get_image_inspect(
+    registry_url: &str,
+    reference_str: &str,
+) -> Result<ImageInspect, String> {
+    // Get cache directory from config (per-registry subdirectory)
+    let cache_dir = get_registry_cache_dir(registry_url)?;
+
+    // Load credentials if available
+    let creds_path = config::get_credentials_path();
+    let credentials = if creds_path.exists() {
+        if let Ok(store) = librex::auth::FileCredentialStore::new(creds_path) {
+            store.get(registry_url).ok().flatten()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Build Rex instance with cache and credentials
+    let mut builder = librex::Rex::builder()
+        .registry_url(registry_url)
+        .with_cache(cache_dir);
+
+    if let Some(creds) = credentials {
+        builder = builder.with_credentials(creds);
+    }
+
+    let mut rex = builder
+        .build()
+        .await
+        .map_err(|e| format!("Failed to connect to registry: {}", e))?;
+
+    // Parse the reference to validate it
+    let reference = librex::reference::Reference::from_str(reference_str)
+        .map_err(|e| format!("Invalid image reference: {}", e))?;
+
+    // Get the manifest
+    let manifest_or_index = rex
+        .get_manifest(reference_str)
+        .await
+        .map_err(|e| format!("Failed to fetch manifest: {}", e))?;
+
+    // For now, we only support single-platform manifests for inspect
+    // TODO: Add support for --platform flag to select from multi-platform images
+    let manifest = match manifest_or_index {
+        librex::oci::ManifestOrIndex::Manifest(m) => m,
+        librex::oci::ManifestOrIndex::Index(_) => {
+            return Err(
+                "Multi-platform images not yet supported for inspect. Use 'show' command or specify --platform flag."
+                    .to_string(),
+            );
+        }
+    };
+
+    // Get config blob
+    let config_digest_str = manifest.config().digest().to_string();
+    let config_digest = librex::digest::Digest::from_str(&config_digest_str)
+        .map_err(|e| format!("Invalid config digest: {}", e))?;
+
+    let config_bytes = rex
+        .get_blob(reference.repository(), &config_digest)
+        .await
+        .map_err(|e| format!("Failed to fetch config blob: {}", e))?;
+
+    let config: librex::oci::ImageConfiguration = serde_json::from_slice(&config_bytes)
+        .map_err(|e| format!("Failed to parse config: {}", e))?;
+
+    // Extract layer information
+    let layers: Vec<LayerInfo> = manifest
+        .layers()
+        .iter()
+        .map(|layer| LayerInfo {
+            digest: layer.digest().to_string(),
+            size: layer.size(),
+            media_type: layer.media_type().to_string(),
+        })
+        .collect();
+
+    // Calculate total size
+    let total_size: u64 = layers.iter().map(|l| l.size).sum();
+
+    // Extract history
+    let history: Vec<HistoryEntry> = config
+        .history()
+        .as_ref()
+        .map(|h| {
+            h.iter()
+                .map(|entry| HistoryEntry {
+                    created: entry.created().as_ref().map(|c| c.to_string()),
+                    created_by: entry.created_by().as_ref().map(|s| s.to_string()),
+                    empty_layer: entry.empty_layer().unwrap_or(false),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Extract environment variables
+    let env = config
+        .config()
+        .as_ref()
+        .and_then(|c| c.env().as_ref())
+        .map(|e| e.to_vec())
+        .unwrap_or_default();
+
+    // Extract entrypoint
+    let entrypoint = config
+        .config()
+        .as_ref()
+        .and_then(|c| c.entrypoint().as_ref())
+        .map(|e| e.to_vec());
+
+    // Extract cmd
+    let cmd = config
+        .config()
+        .as_ref()
+        .and_then(|c| c.cmd().as_ref())
+        .map(|c| c.to_vec());
+
+    // Extract working directory
+    let working_dir = config
+        .config()
+        .as_ref()
+        .and_then(|c| c.working_dir().as_ref())
+        .map(|s| s.to_string());
+
+    // Extract user
+    let user = config
+        .config()
+        .as_ref()
+        .and_then(|c| c.user().as_ref())
+        .map(|s| s.to_string());
+
+    // Extract labels
+    let labels = config
+        .config()
+        .as_ref()
+        .and_then(|c| c.labels().as_ref())
+        .cloned()
+        .unwrap_or_default();
+
+    // Extract exposed ports
+    let exposed_ports = config
+        .config()
+        .as_ref()
+        .and_then(|c| c.exposed_ports().as_ref())
+        .map(|ports| ports.to_vec())
+        .unwrap_or_default();
+
+    // Extract volumes
+    let volumes = config
+        .config()
+        .as_ref()
+        .and_then(|c| c.volumes().as_ref())
+        .map(|vols| vols.to_vec())
+        .unwrap_or_default();
+
+    // Extract RootFS diff IDs
+    let rootfs_diff_ids = config
+        .rootfs()
+        .diff_ids()
+        .iter()
+        .map(|d| d.to_string())
+        .collect();
+
+    // Get manifest digest
+    let manifest_digest = reference
+        .digest()
+        .map(|d| d.to_string())
+        .unwrap_or_else(|| "N/A".to_string());
+
+    Ok(ImageInspect {
+        reference: reference_str.to_string(),
+        registry: registry_url.to_string(),
+        manifest_digest,
+        manifest_type: "OCI Image Manifest".to_string(),
+        config_digest: config_digest_str,
+        size: total_size,
+        architecture: config.architecture().to_string(),
+        os: config.os().to_string(),
+        created: config.created().as_ref().map(|c| c.to_string()),
+        env,
+        entrypoint,
+        cmd,
+        working_dir,
+        user,
+        labels,
+        exposed_ports,
+        volumes,
+        layers,
+        history,
+        rootfs_diff_ids,
+    })
 }
 
 /// Get the registry URL from config or use default
