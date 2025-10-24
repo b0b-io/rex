@@ -170,6 +170,57 @@ pub async fn handle_image_details(reference: &str, format: OutputFormat) {
     }
 }
 
+/// Handle the image inspect command (full detailed inspection)
+pub async fn handle_image_inspect(
+    reference: &str,
+    format: OutputFormat,
+    _platform: Option<&str>,
+    _raw_manifest: bool,
+    _raw_config: bool,
+) {
+    // Get registry URL from config
+    let registry_url = match get_registry_url() {
+        Ok(url) => url,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Get full inspection details
+    let inspect = match get_image_inspect(&registry_url, reference).await {
+        Ok(inspect) => inspect,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // TODO: Implement --raw-manifest and --raw-config flags
+    // TODO: Implement --platform flag for multi-arch images
+
+    // Format output
+    match format {
+        OutputFormat::Pretty => {
+            println!("{}", inspect.format_pretty());
+        }
+        OutputFormat::Json => match serde_json::to_string_pretty(&inspect) {
+            Ok(json) => println!("{}", json),
+            Err(e) => {
+                eprintln!("Error formatting JSON: {}", e);
+                std::process::exit(1);
+            }
+        },
+        OutputFormat::Yaml => match serde_yaml::to_string(&inspect) {
+            Ok(yaml) => print!("{}", yaml),
+            Err(e) => {
+                eprintln!("Error formatting YAML: {}", e);
+                std::process::exit(1);
+            }
+        },
+    }
+}
+
 #[cfg(test)]
 #[path = "handlers_tests.rs"]
 mod tests;
