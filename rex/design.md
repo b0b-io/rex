@@ -1335,295 +1335,129 @@ Shows the complete JSON manifest as returned by the registry.
 
 Shows the complete JSON config blob.
 
-### 2.6 Search Commands
+### 2.6 Search Command
 
-Search for images and tags across the registry using fuzzy matching.
+Search for images and tags across the registry using fuzzy matching in a unified interface.
 
-#### `rex search image`
+#### `rex search`
 
-Search for images (repositories) by name with optional tag filtering.
+Unified search command that searches both repository names and tags simultaneously.
 
-**Command**: `rex search image <QUERY> [OPTIONS]`
+**Command**: `rex search <QUERY> [OPTIONS]`
 
 **Arguments**:
 
-- `<QUERY>`: Image name search query (supports fuzzy matching)
+- `<QUERY>`: Search query (supports fuzzy matching)
 
 **Options**:
 
-- `--tag <TAG>`: Filter results to only images that have this exact tag
 - `--format, -f <FORMAT>`: Output format (`pretty`, `json`, `yaml`)
-- `--quiet, -q`: Show only image names
-- `--limit <N>`: Limit number of results (default: 50)
-- `--exact`: Use exact matching instead of fuzzy matching
+- `--limit <N>`: Limit number of results per category (default: 50)
 
 **Behavior**:
 
-- Fuzzy searches repository names matching the query
-- Without `--tag`: Returns all matching repositories
-- With `--tag`: Returns only repositories that have the specified tag
-- Results are ordered from best match to least relevant
+- Fuzzy searches both repository names and tags across all images
+- Returns results in two sections: Images (repositories) and Tags
+- Tags are shown with their full reference (image:tag)
+- Results are ordered from best match to least relevant within each section
 - Only shows matches with >= 50% accuracy score
 - Scores are calculated internally but not displayed
 
 **Examples**:
 
 ```bash
-# Search for repositories matching "alpine"
-rex search image alpine
+# Search for anything matching "nginx"
+rex search nginx
 
-# Search for repositories matching "alpine" that have tag "3.19"
-rex search image alpine --tag 3.19
-
-# Exact match for image name
-rex search image alpine --exact
-
-# Limit results
-rex search image app --limit 10
+# Limit results per category
+rex search alpine --limit 10
 
 # JSON output
-rex search image nginx --format json
+rex search nginx --format json
 ```
 
-**Output** (without tag filter):
+**Output** (pretty format):
 
 ```bash
-rex search image alpine
+rex search nginx
 ```
 
 ```text
-alpine
-alpine-base
-myapp-alpine
+Images:
+  nginx
+  nginx-proxy
+  my-nginx
+
+Tags:
+  webapp:nginx-1.21
+  alpine:nginx-latest
+  backend:nginx-base
 ```
 
-**Output** (with tag filter):
-
-```bash
-rex search image alpine --tag 3.19
-```
-
-```text
-alpine
-alpine-base
-```
-
-Note: Only images that have a tag exactly matching "3.19" are shown, but the
-image name is still fuzzy matched. Both "alpine" and "alpine-base" have a tag
-named "3.19".
-
-**Output** (JSON format, without tag filter):
+**Output** (JSON format):
 
 ```json
 {
-  "query": "alpine",
-  "search_type": "image",
-  "tag_filter": null,
-  "total_results": 3,
-  "results": [
-    {
-      "name": "alpine",
-      "tags": 5,
-      "last_updated": "2024-01-15T10:30:00Z"
-    },
-    {
-      "name": "alpine-base",
-      "tags": 2,
-      "last_updated": "2024-01-14T08:20:00Z"
-    },
-    {
-      "name": "myapp-alpine",
-      "tags": 3,
-      "last_updated": "2024-01-13T12:15:00Z"
-    }
-  ]
+  "query": "nginx",
+  "images": {
+    "total_results": 3,
+    "results": [
+      {
+        "name": "nginx"
+      },
+      {
+        "name": "nginx-proxy"
+      },
+      {
+        "name": "my-nginx"
+      }
+    ]
+  },
+  "tags": {
+    "total_results": 3,
+    "results": [
+      {
+        "image": "webapp",
+        "tag": "nginx-1.21",
+        "reference": "webapp:nginx-1.21"
+      },
+      {
+        "image": "alpine",
+        "tag": "nginx-latest",
+        "reference": "alpine:nginx-latest"
+      },
+      {
+        "image": "backend",
+        "tag": "nginx-base",
+        "reference": "backend:nginx-base"
+      }
+    ]
+  }
 }
 ```
 
-**Output** (JSON format, with tag filter):
+**Output** (YAML format):
 
-```json
-{
-  "query": "alpine",
-  "search_type": "image",
-  "tag_filter": "3.19",
-  "total_results": 2,
-  "results": [
-    {
-      "name": "alpine",
-      "tags": 5,
-      "last_updated": "2024-01-15T10:30:00Z",
-      "matching_tag": "3.19"
-    },
-    {
-      "name": "alpine-base",
-      "tags": 2,
-      "last_updated": "2024-01-14T14:20:00Z",
-      "matching_tag": "3.19"
-    }
-  ]
-}
-```
-
-#### `rex search tags`
-
-Search for tags with optional image scoping.
-
-**Command**: `rex search tags <QUERY> [OPTIONS]`
-
-**Arguments**:
-
-- `<QUERY>`: Tag search query (supports fuzzy matching)
-
-**Options**:
-
-- `--image <NAME>`: Limit search to tags within this specific image
-- `--format, -f <FORMAT>`: Output format (`pretty`, `json`, `yaml`)
-- `--quiet, -q`: Show only tag names
-- `--limit <N>`: Limit number of results (default: 50)
-- `--exact`: Use exact matching instead of fuzzy matching
-
-**Behavior**:
-
-- Without `--image`: Fuzzy searches tags across all repositories
-- With `--image`: Fuzzy searches tags only within the specified repository
-- Results are ordered from best match to least relevant
-- Only shows matches with >= 50% accuracy score
-- Scores are calculated internally but not displayed
-
-**Examples**:
-
-```bash
-# Search for tags matching "1.1" across all images
-rex search tags 1.1
-
-# Search for tags matching "v1" within the "myapp" image
-rex search tags v1 --image myapp
-
-# Exact tag match
-rex search tags latest --exact
-
-# JSON output
-rex search tags alpine --format json
-```
-
-**Output** (without image scope):
-
-```bash
-rex search tags alpine
-```
-
-```text
-nginx:alpine
-nginx:1.24-alpine
-myapp:alpine-v1
-node:20-alpine3.19
-postgres:16-alpine
-```
-
-**Output** (with image scope):
-
-```bash
-rex search tags v1 --image myapp
-```
-
-```text
-v1.0.0
-v1.0.1
-v1.1.0
-v1.2.0
-alpine-v1
-```
-
-**Output** (JSON format, without image scope):
-
-```json
-{
-  "query": "alpine",
-  "search_type": "tags",
-  "image_scope": null,
-  "total_results": 5,
-  "results": [
-    {
-      "image": "nginx",
-      "tag": "alpine",
-      "reference": "nginx:alpine",
-      "digest": "sha256:abc123...",
-      "size": 23654784
-    },
-    {
-      "image": "nginx",
-      "tag": "1.24-alpine",
-      "reference": "nginx:1.24-alpine",
-      "digest": "sha256:def456...",
-      "size": 23821056
-    },
-    {
-      "image": "myapp",
-      "tag": "alpine-v1",
-      "reference": "myapp:alpine-v1",
-      "digest": "sha256:ghi789...",
-      "size": 45678912
-    },
-    {
-      "image": "node",
-      "tag": "20-alpine3.19",
-      "reference": "node:20-alpine3.19",
-      "digest": "sha256:jkl012...",
-      "size": 89123456
-    },
-    {
-      "image": "postgres",
-      "tag": "16-alpine",
-      "reference": "postgres:16-alpine",
-      "digest": "sha256:mno345...",
-      "size": 67890123
-    }
-  ]
-}
-```
-
-**Output** (JSON format, with image scope):
-
-```json
-{
-  "query": "v1",
-  "search_type": "tags",
-  "image_scope": "myapp",
-  "total_results": 5,
-  "results": [
-    {
-      "tag": "v1.0.0",
-      "reference": "myapp:v1.0.0",
-      "digest": "sha256:aaa111...",
-      "size": 45678912
-    },
-    {
-      "tag": "v1.0.1",
-      "reference": "myapp:v1.0.1",
-      "digest": "sha256:bbb222...",
-      "size": 45679123
-    },
-    {
-      "tag": "v1.1.0",
-      "reference": "myapp:v1.1.0",
-      "digest": "sha256:ccc333...",
-      "size": 45780234
-    },
-    {
-      "tag": "v1.2.0",
-      "reference": "myapp:v1.2.0",
-      "digest": "sha256:ddd444...",
-      "size": 45881345
-    },
-    {
-      "tag": "alpine-v1",
-      "reference": "myapp:alpine-v1",
-      "digest": "sha256:eee555...",
-      "size": 46882456
-    }
-  ]
-}
+```yaml
+query: nginx
+images:
+  total_results: 3
+  results:
+    - name: nginx
+    - name: nginx-proxy
+    - name: my-nginx
+tags:
+  total_results: 3
+  results:
+    - image: webapp
+      tag: nginx-1.21
+      reference: webapp:nginx-1.21
+    - image: alpine
+      tag: nginx-latest
+      reference: alpine:nginx-latest
+    - image: backend
+      tag: nginx-base
+      reference: backend:nginx-base
 ```
 
 **Match Accuracy Threshold**:
@@ -1631,7 +1465,7 @@ alpine-v1
 - Results are internally scored based on match quality
 - Only matches with >= 50% accuracy are displayed
 - Results are ordered from best match (highest score) to worst match
-  (lowest score above threshold)
+  (lowest score above threshold) within each section
 - Scoring factors:
   - Exact matches (highest priority)
   - Prefix matches (high priority)
