@@ -196,6 +196,30 @@ pub fn handle_cache_prune(name: Option<&str>, all: bool, dry_run: bool) {
     }
 }
 
+/// Handle the cache sync subcommand
+pub async fn handle_cache_sync(name: Option<&str>, manifests: bool, all: bool, force: bool) {
+    let config_path = config::get_config_path();
+
+    match cache_sync(&config_path, name, manifests, all, force).await {
+        Ok(stats) => {
+            println!("✓ Cache synced successfully:");
+            println!("  {} catalog entries", stats.catalog_entries);
+            println!("  {} tag entries", stats.tag_entries);
+            if manifests {
+                println!("  {} manifest entries", stats.manifest_entries);
+            }
+            println!(
+                "  Total size: {:.2} MB",
+                stats.total_size as f64 / 1_048_576.0
+            );
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "handlers_tests.rs"]
 mod tests;

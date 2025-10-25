@@ -541,6 +541,15 @@ impl Formattable for CacheStatsDisplay {
     }
 }
 
+/// Cache sync statistics
+#[derive(Debug, Default)]
+pub struct CacheSyncStats {
+    pub catalog_entries: u64,
+    pub tag_entries: u64,
+    pub manifest_entries: u64,
+    pub total_size: u64,
+}
+
 /// Get cache statistics for a registry
 pub fn cache_stats(config_path: &PathBuf, name: Option<&str>) -> Result<CacheStatsDisplay, String> {
     // Load configuration
@@ -757,6 +766,153 @@ pub fn cache_prune(
     cache
         .prune()
         .map_err(|e| format!("Failed to prune cache: {}", e))
+}
+
+/// Sync cache by fetching and caching registry metadata
+pub async fn cache_sync(
+    config_path: &PathBuf,
+    name: Option<&str>,
+    manifests: bool,
+    all: bool,
+    _force: bool,
+) -> Result<CacheSyncStats, String> {
+    let cfg = config::Config::load(config_path)?;
+
+    if all {
+        // Sync all registries
+        let mut total_stats = CacheSyncStats::default();
+        for registry in &cfg.registries.list {
+            println!(
+                "Syncing cache for '{}' ({})...",
+                registry.name, registry.url
+            );
+            let stats = sync_single_registry(&registry.url, manifests).await?;
+            total_stats.catalog_entries += stats.catalog_entries;
+            total_stats.tag_entries += stats.tag_entries;
+            total_stats.manifest_entries += stats.manifest_entries;
+            total_stats.total_size += stats.total_size;
+        }
+        return Ok(total_stats);
+    }
+
+    // Get single registry
+    let registry = if let Some(name) = name {
+        cfg.registries
+            .list
+            .iter()
+            .find(|r| r.name == name)
+            .ok_or_else(|| format!("Registry '{}' not found", name))?
+    } else {
+        let default_name = cfg
+            .registries
+            .default
+            .as_ref()
+            .ok_or_else(|| "No default registry set.".to_string())?;
+        cfg.registries
+            .list
+            .iter()
+            .find(|r| r.name == *default_name)
+            .ok_or_else(|| format!("Default registry '{}' not found", default_name))?
+    };
+
+    println!(
+        "Syncing cache for '{}' ({})...",
+        name.or(cfg.registries.default.as_deref()).unwrap(),
+        registry.url
+    );
+
+    sync_single_registry(&registry.url, manifests).await
+}
+
+async fn sync_single_registry(
+    registry_url: &str,
+    manifests: bool,
+) -> Result<CacheSyncStats, String> {
+    let cache_dir = config::get_registry_cache_dir(registry_url).unwrap();
+    let cache_path_ref = cache_dir.as_path();
+
+    // Load credentials if available
+    let creds_path = config::get_credentials_path();
+    let credentials = if creds_path.exists() {
+        if let Ok(store) = librex::auth::FileCredentialStore::new(creds_path) {
+            store.get(registry_url).ok().flatten()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Build Rex with cache and credentials
+    let mut builder = librex::Rex::builder()
+        .registry_url(registry_url)
+        .with_cache(cache_path_ref);
+
+    if let Some(creds) = credentials {
+        builder = builder.with_credentials(creds);
+    }
+
+    let mut rex = builder
+        .build()
+        .await
+        .map_err(|e| format!("Failed to connect to registry: {}", e))?;
+
+    let mut stats = CacheSyncStats::default();
+
+    // Fetch catalog
+    print!("Fetching catalog... ");
+    let repos = rex
+        .list_repositories()
+        .await
+        .map_err(|e| format!("Failed to fetch catalog: {}", e))?;
+    println!("✓ ({} repositories)", repos.len());
+    stats.catalog_entries = repos.len() as u64;
+
+    // Fetch tags for each repository
+    print!("Fetching tags... ");
+    let mut total_tags = 0;
+    for repo in &repos {
+        let tags = rex
+            .list_tags(repo)
+            .await
+            .map_err(|e| format!("Failed to fetch tags for {}: {}", repo, e))?;
+        total_tags += tags.len();
+
+        // Fetch manifests if requested
+        if manifests {
+            for tag in &tags {
+                let reference = format!("{}:{}", repo, tag);
+                let _ = rex.get_manifest(&reference).await; // Ignore errors for individual manifests
+                stats.manifest_entries += 1;
+            }
+        }
+    }
+    println!(
+        "✓ ({} tags across {} repositories)",
+        total_tags,
+        repos.len()
+    );
+    stats.tag_entries = total_tags as u64;
+
+    if manifests {
+        println!(
+            "Fetching manifests... ✓ ({} manifests)",
+            stats.manifest_entries
+        );
+    }
+
+    // Get final cache size
+    let cache = librex::cache::Cache::new(
+        cache_dir,
+        librex::config::CacheTtl::default(),
+        std::num::NonZeroUsize::new(100).unwrap(),
+    );
+    let cache_stats = cache
+        .stats()
+        .map_err(|e| format!("Failed to get cache stats: {}", e))?;
+    stats.total_size = cache_stats.disk_size;
+
+    Ok(stats)
 }
 
 #[cfg(test)]

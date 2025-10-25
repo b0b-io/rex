@@ -890,6 +890,90 @@ Would remove 42 expired entries (3.2 MB):
   - 7 config entries
 ```
 
+#### `rex registry cache sync`
+
+Pre-populate cache by fetching and caching registry metadata.
+
+**Command**: `rex registry cache sync [NAME] [OPTIONS]`
+
+**Arguments**:
+
+- `[NAME]`: Registry name (optional, uses default if omitted)
+
+**Options**:
+
+- `--manifests`: Also fetch and cache image manifests (increases cache size)
+- `--all`: Sync cache for all registries
+- `--force`: Re-fetch even if entries exist in cache
+
+**Behavior**:
+
+- Fetches catalog (list of repositories)
+- Fetches tags for each repository
+- Optionally fetches manifests for each tag
+- Populates cache for faster subsequent operations
+- Shows progress during sync
+
+**Examples**:
+
+```bash
+# Sync cache for current registry
+rex registry cache sync
+
+# Sync cache for specific registry
+rex registry cache sync prod
+
+# Sync all registries
+rex registry cache sync --all
+
+# Sync with manifests (slower, more complete)
+rex registry cache sync --manifests
+
+# Force re-sync even if cached
+rex registry cache sync --force
+```
+
+**Output**:
+
+```text
+Syncing cache for 'local' (http://localhost:5000)...
+
+Fetching catalog... ✓ (45 repositories)
+Fetching tags... ✓ (312 tags across 45 repositories)
+
+Cache synced successfully:
+  45 catalog entries
+  312 tag entries
+  Total size: 2.8 MB
+
+Cache location: ~/.cache/rex/http___localhost_5000/
+```
+
+**Output** (with --manifests):
+
+```text
+Syncing cache for 'local' (http://localhost:5000)...
+
+Fetching catalog... ✓ (45 repositories)
+Fetching tags... ✓ (312 tags across 45 repositories)
+Fetching manifests... ✓ (312 manifests)
+
+Cache synced successfully:
+  45 catalog entries
+  312 tag entries
+  312 manifest entries
+  Total size: 24.5 MB
+
+Cache location: ~/.cache/rex/http___localhost_5000/
+```
+
+**Use Cases**:
+
+- Pre-populate cache before going offline
+- Warm up cache after clearing
+- Prepare for faster browsing in TUI mode
+- Mirror metadata for backup purposes
+
 ### Configuration File Structure
 
 Registries are stored in `~/.config/rex/config.toml`:

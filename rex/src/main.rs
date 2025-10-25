@@ -223,6 +223,20 @@ enum CacheCommands {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Pre-populate cache by syncing registry metadata
+    Sync {
+        /// Registry name (optional, uses default if omitted)
+        name: Option<String>,
+        /// Also fetch and cache image manifests
+        #[arg(long)]
+        manifests: bool,
+        /// Sync cache for all registries
+        #[arg(long)]
+        all: bool,
+        /// Re-fetch even if entries exist in cache
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 #[tokio::main]
@@ -293,6 +307,20 @@ async fn main() {
                 }
                 CacheCommands::Prune { name, all, dry_run } => {
                     commands::registry::handlers::handle_cache_prune(name.as_deref(), all, dry_run);
+                }
+                CacheCommands::Sync {
+                    name,
+                    manifests,
+                    all,
+                    force,
+                } => {
+                    commands::registry::handlers::handle_cache_sync(
+                        name.as_deref(),
+                        manifests,
+                        all,
+                        force,
+                    )
+                    .await;
                 }
             },
         },
