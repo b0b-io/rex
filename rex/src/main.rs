@@ -38,6 +38,17 @@ enum Commands {
         #[command(subcommand)]
         command: ImageCommands,
     },
+    /// Search for images and tags
+    Search {
+        /// Search query
+        query: String,
+        /// Output format: pretty, json, yaml
+        #[arg(short, long, default_value = "pretty")]
+        format: String,
+        /// Limit number of results per category
+        #[arg(long)]
+        limit: Option<usize>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -374,5 +385,13 @@ async fn main() {
                 .await;
             }
         },
+        Commands::Search {
+            query,
+            format,
+            limit,
+        } => {
+            let fmt = format::OutputFormat::from(format.as_str());
+            commands::search::handlers::handle_search(query.as_str(), fmt, limit).await;
+        }
     }
 }

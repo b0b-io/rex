@@ -1,0 +1,182 @@
+use crate::config;
+use crate::format::Formattable;
+use librex::auth::CredentialStore;
+use serde::Serialize;
+
+pub mod handlers;
+
+/// Search results containing both images and tags
+#[derive(Debug, Serialize)]
+pub struct SearchResults {
+    pub query: String,
+    pub images: ImageResults,
+    pub tags: TagResults,
+}
+
+/// Image search results
+#[derive(Debug, Serialize)]
+pub struct ImageResults {
+    pub total_results: usize,
+    pub results: Vec<ImageResult>,
+}
+
+/// Tag search results
+#[derive(Debug, Serialize)]
+pub struct TagResults {
+    pub total_results: usize,
+    pub results: Vec<TagResult>,
+}
+
+/// Single image search result
+#[derive(Debug, Serialize)]
+pub struct ImageResult {
+    pub name: String,
+}
+
+/// Single tag search result
+#[derive(Debug, Serialize)]
+pub struct TagResult {
+    pub image: String,
+    pub tag: String,
+    pub reference: String,
+}
+
+impl Formattable for SearchResults {
+    fn format_pretty(&self) -> String {
+        let mut output = String::new();
+
+        // Images section
+        if !self.images.results.is_empty() {
+            output.push_str("Images:\n");
+            for result in &self.images.results {
+                output.push_str(&format!("  {}\n", result.name));
+            }
+        }
+
+        // Tags section
+        if !self.tags.results.is_empty() {
+            if !self.images.results.is_empty() {
+                output.push('\n');
+            }
+            output.push_str("Tags:\n");
+            for result in &self.tags.results {
+                output.push_str(&format!("  {}\n", result.reference));
+            }
+        }
+
+        // If no results
+        if self.images.results.is_empty() && self.tags.results.is_empty() {
+            output.push_str("No results found\n");
+        }
+
+        output
+    }
+}
+
+/// Perform unified search across images and tags
+pub async fn search(query: &str, limit: Option<usize>) -> Result<SearchResults, String> {
+    let config_path = config::get_config_path();
+    let cfg = config::Config::load(&config_path)?;
+
+    // Get the default registry
+    let registry = if let Some(default_name) = &cfg.registries.default {
+        cfg.registries
+            .list
+            .iter()
+            .find(|r| r.name == *default_name)
+            .ok_or_else(|| format!("Default registry '{}' not found", default_name))?
+    } else {
+        return Err(
+            "No default registry set. Use 'rex registry use <name>' to set one.".to_string(),
+        );
+    };
+
+    // Get cache directory
+    let cache_dir = config::get_registry_cache_dir(&registry.url)?;
+
+    // Load credentials if available
+    let creds_path = config::get_credentials_path();
+    let credentials = if creds_path.exists() {
+        if let Ok(store) = librex::auth::FileCredentialStore::new(creds_path) {
+            store.get(&registry.url).ok().flatten()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Build Rex client
+    let mut builder = librex::Rex::builder()
+        .registry_url(&registry.url)
+        .with_cache(cache_dir.as_path());
+
+    if let Some(creds) = credentials {
+        builder = builder.with_credentials(creds);
+    }
+
+    let mut rex = builder
+        .build()
+        .await
+        .map_err(|e| format!("Failed to connect to registry: {}", e))?;
+
+    // Search images (repositories)
+    let mut image_results = rex
+        .search_repositories(query)
+        .await
+        .map_err(|e| format!("Failed to search repositories: {}", e))?;
+
+    // Apply limit if specified
+    if let Some(limit) = limit {
+        image_results.truncate(limit);
+    }
+
+    // Search tags across all images
+    let mut tag_results = rex
+        .search_images(query)
+        .await
+        .map_err(|e| format!("Failed to search tags: {}", e))?;
+
+    // Apply limit if specified
+    if let Some(limit) = limit {
+        tag_results.truncate(limit);
+    }
+
+    // Convert to our result structures
+    let images = ImageResults {
+        total_results: image_results.len(),
+        results: image_results
+            .into_iter()
+            .map(|result| ImageResult { name: result.value })
+            .collect(),
+    };
+
+    let tags = TagResults {
+        total_results: tag_results.len(),
+        results: tag_results
+            .into_iter()
+            .map(|result| {
+                // Parse the "repo:tag" format from the value
+                let parts: Vec<&str> = result.value.split(':').collect();
+                let (image, tag) = if parts.len() == 2 {
+                    (parts[0].to_string(), parts[1].to_string())
+                } else {
+                    // Fallback in case format is unexpected
+                    (result.value.clone(), String::new())
+                };
+
+                TagResult {
+                    reference: result.value,
+                    image,
+                    tag,
+                }
+            })
+            .collect(),
+    };
+
+    Ok(SearchResults {
+        query: query.to_string(),
+        images,
+        tags,
+    })
+}
