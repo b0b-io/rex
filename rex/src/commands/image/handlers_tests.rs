@@ -218,8 +218,8 @@ async fn test_get_image_inspect_single_platform() {
 
     // Verify history
     assert_eq!(inspect.history.len(), 2);
-    assert_eq!(inspect.history[0].empty_layer, false);
-    assert_eq!(inspect.history[1].empty_layer, true);
+    assert!(!inspect.history[0].empty_layer);
+    assert!(inspect.history[1].empty_layer);
     assert!(
         inspect.history[0]
             .created_by

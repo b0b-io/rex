@@ -1,5 +1,5 @@
 use crate::config;
-use crate::format::{Formattable, OutputFormat};
+use crate::format::{self, Formattable, OutputFormat};
 
 /// Implement Formattable for Config to enable output formatting
 impl Formattable for config::Config {
@@ -39,10 +39,13 @@ pub fn handle_init() {
     let config_path = config::get_config_path();
     match config::init_config(&config_path) {
         Ok(_) => {
-            println!("Initialized config file at: {}", config_path.display());
+            format::success(&format!(
+                "Initialized config file at: {}",
+                config_path.display()
+            ));
         }
         Err(e) => {
-            eprintln!("Error: {}", e);
+            format::error(&e);
             std::process::exit(1);
         }
     }
@@ -58,7 +61,7 @@ pub fn handle_get(key: Option<&str>, format: OutputFormat) {
             match config::get_config_value(&config_path, k) {
                 Ok(value) => println!("{}", value),
                 Err(e) => {
-                    eprintln!("Error: {}", e);
+                    format::error(&e);
                     std::process::exit(1);
                 }
             }
@@ -69,12 +72,12 @@ pub fn handle_get(key: Option<&str>, format: OutputFormat) {
                 Ok(cfg) => match crate::format::format_output(&cfg, format) {
                     Ok(output) => println!("{}", output),
                     Err(e) => {
-                        eprintln!("Error formatting output: {}", e);
+                        format::error(&format!("formatting output: {}", e));
                         std::process::exit(1);
                     }
                 },
                 Err(e) => {
-                    eprintln!("Error: {}", e);
+                    format::error(&e);
                     std::process::exit(1);
                 }
             }
@@ -90,9 +93,9 @@ pub fn handle_set(key: Option<&str>, value: Option<&str>) {
         (Some(k), Some(v)) => {
             // Set specific key
             match config::set_config_value(&config_path, k, v) {
-                Ok(_) => println!("Set {} = {}", k, v),
+                Ok(_) => format::success(&format!("Set {} = {}", k, v)),
                 Err(e) => {
-                    eprintln!("Error: {}", e);
+                    format::error(&e);
                     std::process::exit(1);
                 }
             }
@@ -102,14 +105,14 @@ pub fn handle_set(key: Option<&str>, value: Option<&str>) {
             match config::edit_config(&config_path) {
                 Ok(_) => {}
                 Err(e) => {
-                    eprintln!("Error: {}", e);
+                    format::error(&e);
                     std::process::exit(1);
                 }
             }
         }
         _ => {
-            eprintln!(
-                "Error: Invalid arguments. Use 'rex config set <key> <value>' or 'rex config set' to edit."
+            format::error(
+                "Invalid arguments. Use 'rex config set <key> <value>' or 'rex config set' to edit.",
             );
             std::process::exit(1);
         }

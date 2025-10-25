@@ -1,5 +1,5 @@
 use crate::config::{self, RegistryEntry};
-use crate::format::Formattable;
+use crate::format::{self, Formattable};
 use librex::auth::CredentialStore;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -56,21 +56,24 @@ impl Formattable for RegistryCheckResult {
         output.push_str(&format!("URL: {}\n", self.url));
 
         if self.online {
-            output.push_str("Status: ✓ Online\n");
+            output.push_str(&format!("Status: {} Online\n", format::checkmark()));
             if let Some(ref api_version) = self.api_version {
                 output.push_str(&format!("API Version: {}\n", api_version));
             }
 
             // Show auth status
             if self.authenticated {
-                output.push_str("Authentication: ✓ Authenticated\n");
+                output.push_str(&format!(
+                    "Authentication: {} Authenticated\n",
+                    format::checkmark()
+                ));
             } else if self.auth_required {
                 output.push_str("Authentication: ⚠ Required (not configured)\n");
             } else {
                 output.push_str("Authentication: ○ Not required\n");
             }
         } else {
-            output.push_str("Status: ✗ Offline\n");
+            output.push_str(&format!("Status: {} Offline\n", format::error_mark()));
             if let Some(ref error) = self.error {
                 output.push_str(&format!("Reason: {}\n", error));
             }
@@ -470,7 +473,7 @@ pub(crate) async fn login_registry(
         }
     })?;
 
-    println!("✓ Credentials verified successfully");
+    format::success("Credentials verified successfully");
 
     // Store credentials
     let creds_path = config::get_credentials_path();
@@ -858,18 +861,25 @@ async fn sync_single_registry(
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
     let mut stats = CacheSyncStats::default();
+    let formatter = format::create_formatter();
 
-    // Fetch catalog
-    print!("Fetching catalog... ");
+    // Fetch catalog with spinner
+    let spinner = formatter.spinner("Fetching catalog...");
+
     let repos = rex
         .list_repositories()
         .await
         .map_err(|e| format!("Failed to fetch catalog: {}", e))?;
-    println!("✓ ({} repositories)", repos.len());
+
+    formatter.finish_progress(
+        spinner,
+        &format!("Fetched catalog ({} repositories)", repos.len()),
+    );
     stats.catalog_entries = repos.len() as u64;
 
-    // Fetch tags for each repository
-    print!("Fetching tags... ");
+    // Fetch tags for each repository with progress bar
+    let pb = formatter.progress_bar(repos.len() as u64, "Fetching tags");
+
     let mut total_tags = 0;
     for repo in &repos {
         let tags = rex
@@ -886,19 +896,22 @@ async fn sync_single_registry(
                 stats.manifest_entries += 1;
             }
         }
+
+        pb.inc(1);
     }
-    println!(
-        "✓ ({} tags across {} repositories)",
-        total_tags,
-        repos.len()
+
+    formatter.finish_progress(
+        pb,
+        &format!(
+            "Fetched {} tags across {} repositories",
+            total_tags,
+            repos.len()
+        ),
     );
     stats.tag_entries = total_tags as u64;
 
     if manifests {
-        println!(
-            "Fetching manifests... ✓ ({} manifests)",
-            stats.manifest_entries
-        );
+        formatter.success(&format!("Fetched {} manifests", stats.manifest_entries));
     }
 
     // Get final cache size

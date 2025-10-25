@@ -1,4 +1,178 @@
+use indicatif::{ProgressBar, ProgressStyle};
+use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
+use std::io::IsTerminal;
+
+/// Trait for output formatting that can be TTY-aware or plain text
+pub trait OutputFormatter: Send + Sync {
+    /// Print a success message
+    fn success(&self, message: &str);
+
+    /// Print an error message
+    fn error(&self, message: &str);
+
+    /// Print a warning message
+    fn warning(&self, message: &str);
+
+    /// Create a spinner for indeterminate progress
+    fn spinner(&self, message: &str) -> ProgressBar;
+
+    /// Create a progress bar for determinate progress
+    fn progress_bar(&self, len: u64, message: &str) -> ProgressBar;
+
+    /// Finish a progress operation with a message
+    fn finish_progress(&self, pb: ProgressBar, message: &str);
+
+    /// Get a colorized checkmark if colors are supported
+    fn checkmark(&self) -> String;
+}
+
+/// TTY-aware formatter with colors and progress indicators
+pub struct TtyFormatter;
+
+impl OutputFormatter for TtyFormatter {
+    fn success(&self, message: &str) {
+        println!("{} {}", "✓".green().bold(), message);
+    }
+
+    fn error(&self, message: &str) {
+        eprintln!("{} {}", "✗".red().bold(), message);
+    }
+
+    fn warning(&self, message: &str) {
+        println!("{} {}", "⚠".yellow().bold(), message);
+    }
+
+    fn spinner(&self, message: &str) -> ProgressBar {
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.cyan} {msg}")
+                .unwrap(),
+        );
+        spinner.set_message(message.to_string());
+        spinner.enable_steady_tick(std::time::Duration::from_millis(100));
+        spinner
+    }
+
+    fn progress_bar(&self, len: u64, message: &str) -> ProgressBar {
+        let pb = ProgressBar::new(len);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+                .unwrap()
+                .progress_chars("█▓▒░ "),
+        );
+        pb.set_message(message.to_string());
+        pb
+    }
+
+    fn finish_progress(&self, pb: ProgressBar, message: &str) {
+        pb.finish_with_message(format!("{} {}", "✓".green(), message));
+    }
+
+    fn checkmark(&self) -> String {
+        format!("{}", "✓".green())
+    }
+}
+
+/// Plain text formatter for non-TTY output (piped, scripted)
+pub struct PlainFormatter;
+
+impl OutputFormatter for PlainFormatter {
+    fn success(&self, message: &str) {
+        println!("✓ {}", message);
+    }
+
+    fn error(&self, message: &str) {
+        eprintln!("✗ {}", message);
+    }
+
+    fn warning(&self, message: &str) {
+        println!("⚠ {}", message);
+    }
+
+    fn spinner(&self, message: &str) -> ProgressBar {
+        println!("{}", message);
+        ProgressBar::hidden()
+    }
+
+    fn progress_bar(&self, len: u64, message: &str) -> ProgressBar {
+        println!("{} (0/{})", message, len);
+        ProgressBar::hidden()
+    }
+
+    fn finish_progress(&self, pb: ProgressBar, message: &str) {
+        pb.finish();
+        println!("✓ {}", message);
+    }
+
+    fn checkmark(&self) -> String {
+        "✓".to_string()
+    }
+}
+
+/// Create the appropriate formatter based on TTY and environment
+pub fn create_formatter() -> Box<dyn OutputFormatter> {
+    // Check if NO_COLOR is set
+    if std::env::var("NO_COLOR").is_ok() {
+        return Box::new(PlainFormatter);
+    }
+
+    // Check if stdout OR stderr is a terminal (since we output to both)
+    if std::io::stdout().is_terminal() || std::io::stderr().is_terminal() {
+        Box::new(TtyFormatter)
+    } else {
+        Box::new(PlainFormatter)
+    }
+}
+
+// Legacy helper functions that use a lazily created formatter
+// These are kept for backward compatibility
+
+use std::sync::OnceLock;
+
+static FORMATTER: OnceLock<Box<dyn OutputFormatter>> = OnceLock::new();
+
+fn get_formatter() -> &'static dyn OutputFormatter {
+    FORMATTER.get_or_init(|| create_formatter()).as_ref()
+}
+
+/// Check if we should use colors in output
+pub fn should_color() -> bool {
+    std::io::stdout().is_terminal() && std::env::var("NO_COLOR").is_err()
+}
+
+/// Print a success message with optional coloring
+pub fn success(message: &str) {
+    get_formatter().success(message);
+}
+
+/// Print an error message with optional coloring
+pub fn error(message: &str) {
+    get_formatter().error(message);
+}
+
+/// Print a warning message with optional coloring
+#[allow(dead_code)]
+pub fn warning(message: &str) {
+    get_formatter().warning(message);
+}
+
+/// Colorize a checkmark for success if colors are enabled
+pub fn checkmark() -> String {
+    get_formatter().checkmark()
+}
+
+/// Colorize an X mark for errors if colors are enabled
+#[allow(dead_code)]
+pub fn error_mark() -> String {
+    if should_color() {
+        format!("{}", "✗".red())
+    } else {
+        "✗".to_string()
+    }
+}
 
 /// Output format for CLI commands
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -402,15 +402,24 @@ pub(crate) async fn list_images(
 
     // For each repository, get tag count
     // TODO: In the future, we could also fetch last updated time from manifest metadata
+    let formatter = crate::format::create_formatter();
+    let pb = formatter.progress_bar(repos.len() as u64, "Fetching image information");
+
     let mut images = Vec::new();
-    for repo in repos {
+    for repo in &repos {
         let tags = rex
-            .list_tags(&repo)
+            .list_tags(repo)
             .await
             .map_err(|e| format!("Failed to list tags for {}: {}", repo, e))?;
 
-        images.push(ImageInfo::new(repo, tags.len(), None));
+        images.push(ImageInfo::new(repo.clone(), tags.len(), None));
+        pb.inc(1);
     }
+
+    formatter.finish_progress(
+        pb,
+        &format!("Fetched information for {} images", repos.len()),
+    );
 
     Ok(images)
 }

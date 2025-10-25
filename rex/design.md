@@ -1624,7 +1624,258 @@ The version information is embedded at compile time:
 - Rust version from `rustc --version`
 - Target triple from build configuration
 
-### 2.8 Exit Codes
+### 2.8 Shell Completion
+
+Rex supports generating shell completion scripts for multiple shells, enabling
+tab completion for commands, subcommands, and options.
+
+#### `rex completion <SHELL>`
+
+Generate shell completion script for the specified shell.
+
+**Command**: `rex completion <SHELL>`
+
+**Arguments**:
+
+- `<SHELL>`: Target shell (required)
+  - `bash`: Bash shell
+  - `zsh`: Zsh shell
+  - `fish`: Fish shell
+  - `powershell`: PowerShell
+  - `elvish`: Elvish shell
+
+**Behavior**:
+
+- Generates completion script and writes to stdout
+- Script should be sourced or installed according to shell conventions
+- Enables tab completion for rex commands and options
+- Returns exit code 0
+
+**Examples**:
+
+```bash
+# Generate bash completion
+rex completion bash > ~/.local/share/bash-completion/completions/rex
+
+# Generate zsh completion
+rex completion zsh > ~/.zfunc/_rex
+
+# Generate fish completion
+rex completion fish > ~/.config/fish/completions/rex.fish
+
+# Generate PowerShell completion
+rex completion powershell > rex.ps1
+```
+
+**Installation**:
+
+**Bash**:
+```bash
+rex completion bash | sudo tee /usr/share/bash-completion/completions/rex
+```
+
+**Zsh**:
+```bash
+rex completion zsh > ~/.zfunc/_rex
+# Add to .zshrc: fpath+=~/.zfunc
+```
+
+**Fish**:
+```bash
+rex completion fish > ~/.config/fish/completions/rex.fish
+```
+
+### 2.9 Output Formatting System
+
+Rex implements a comprehensive TTY-aware formatting system that automatically
+adapts output based on whether stdout/stderr is a terminal or being piped.
+
+#### Architecture
+
+The formatting system uses a trait-based design with two implementations:
+
+**`OutputFormatter` Trait**:
+```rust
+pub trait OutputFormatter: Send + Sync {
+    fn success(&self, message: &str);
+    fn error(&self, message: &str);
+    fn warning(&self, message: &str);
+    fn spinner(&self, message: &str) -> ProgressBar;
+    fn progress_bar(&self, len: u64, message: &str) -> ProgressBar;
+    fn finish_progress(&self, pb: ProgressBar, message: &str);
+    fn checkmark(&self) -> String;
+}
+```
+
+**Implementations**:
+
+1. **`TtyFormatter`**: Used when stdout or stderr is a terminal
+   - Colored output (green ✓, red ✗, yellow ⚠)
+   - Animated spinners for indeterminate operations
+   - Progress bars with [████░░] visualization and ETA
+   - Uses `owo-colors` for coloring and `indicatif` for progress
+
+2. **`PlainFormatter`**: Used when output is piped or redirected
+   - Plain text output without ANSI codes
+   - Compatible with grep, sed, awk, and other text processing tools
+   - Hidden progress bars (returns immediately)
+   - Suitable for CI/CD, logging, and scripting
+
+#### TTY Detection
+
+The formatter is selected automatically based on:
+
+1. **NO_COLOR environment variable**: If set, always use plain formatting
+2. **TTY detection**: Checks if stdout OR stderr is a terminal
+   - Uses `std::io::IsTerminal` trait
+   - Checks both streams since errors go to stderr
+
+```rust
+pub fn create_formatter() -> Box<dyn OutputFormatter> {
+    if std::env::var("NO_COLOR").is_ok() {
+        return Box::new(PlainFormatter);
+    }
+    if std::io::stdout().is_terminal() || std::io::stderr().is_terminal() {
+        Box::new(TtyFormatter)
+    } else {
+        Box::new(PlainFormatter)
+    }
+}
+```
+
+#### Output Functions
+
+**Success Messages**:
+```rust
+format::success("Registry initialized successfully");
+// TTY:   ✓ Registry initialized successfully  (green ✓)
+// Pipe:  ✓ Registry initialized successfully  (plain text)
+```
+
+**Error Messages**:
+```rust
+format::error("Failed to connect to registry");
+// TTY:   ✗ Failed to connect to registry  (red ✗)
+// Pipe:  ✗ Failed to connect to registry  (plain text)
+```
+
+**Warning Messages**:
+```rust
+format::warning("Cache is stale");
+// TTY:   ⚠ Cache is stale  (yellow ⚠)
+// Pipe:  ⚠ Cache is stale  (plain text)
+```
+
+**Progress Indicators**:
+
+```rust
+let formatter = format::create_formatter();
+
+// Spinner for indeterminate operations
+let spinner = formatter.spinner("Fetching catalog...");
+// ... perform operation ...
+formatter.finish_progress(spinner, "Fetched catalog (45 repositories)");
+
+// Progress bar for determinate operations
+let pb = formatter.progress_bar(100, "Downloading layers");
+for i in 0..100 {
+    // ... process item ...
+    pb.inc(1);
+}
+formatter.finish_progress(pb, "Downloaded all layers");
+```
+
+**TTY Output**:
+```text
+⠋ Fetching catalog...
+✓ Fetched catalog (45 repositories)
+
+Downloading layers [████████████████░░░░] 80/100 (2s)
+✓ Downloaded all layers
+```
+
+**Piped Output**:
+```text
+Fetching catalog...
+✓ Fetched catalog (45 repositories)
+Downloading layers (0/100)
+✓ Downloaded all layers
+```
+
+#### Symbol Functions
+
+For data display in formatted output (like `RegistryCheckResult`), use:
+
+```rust
+// Colored/plain checkmark based on TTY
+let check = format::checkmark();
+// TTY:   ✓ (green)
+// Pipe:  ✓ (plain)
+
+// Colored/plain error mark based on TTY
+let cross = format::error_mark();
+// TTY:   ✗ (red)
+// Pipe:  ✗ (plain)
+```
+
+#### Usage Examples
+
+**Registry Sync with Progress**:
+```bash
+# TTY output (terminal)
+$ rex registry cache sync
+⠋ Fetching catalog...
+✓ Fetched catalog (45 repositories)
+Fetching tags [████████████████░░░░] 36/45 (5s)
+✓ Fetched 312 tags across 45 repositories
+
+# Piped output (script)
+$ rex registry cache sync | cat
+Fetching catalog...
+✓ Fetched catalog (45 repositories)
+Fetching tags (0/45)
+✓ Fetched 312 tags across 45 repositories
+```
+
+**Error Handling**:
+```bash
+# TTY output
+$ rex config set invalid.key value
+✗ Unknown config key: invalid.key
+
+# Piped output (same, but no colors)
+$ rex config set invalid.key value 2>&1 | cat
+✗ Unknown config key: invalid.key
+```
+
+#### Dependencies
+
+The formatting system uses:
+
+- **`indicatif`** v0.17: Progress bars and spinners
+- **`owo-colors`** v4: Terminal coloring with automatic TTY detection
+- **`clap_complete`** v4.5: Shell completion generation
+
+#### Design Rationale
+
+**Why Trait-Based?**
+- Clean separation of TTY vs non-TTY formatting logic
+- No scattered `is_tty()` checks throughout codebase
+- Easy to test each implementation independently
+- Single decision point at application startup
+
+**Why Check Both stdout and stderr?**
+- Success messages go to stdout (`println!`)
+- Error messages go to stderr (`eprintln!`)
+- User might redirect only one stream
+- Ensures colors appear if either is a terminal
+
+**Why NO_COLOR Takes Precedence?**
+- Respects user preference over automatic detection
+- Follows [NO_COLOR standard](https://no-color.org/)
+- Important for accessibility (screen readers, vision impairments)
+
+### 2.10 Exit Codes
 
 Rex uses standard exit codes to indicate success or failure. This allows scripts
 to properly handle errors and make decisions based on the result.
@@ -1760,7 +2011,7 @@ if [ ${exit_code:-0} -ne 0 ] && [ ${exit_code:-0} -ne 5 ]; then
 fi
 ```
 
-### 2.9 Environment Variables
+### 2.11 Environment Variables
 
 Rex respects standard environment variables and provides custom variables for
 behavior control. Environment variables have lower priority than command-line
@@ -1783,10 +2034,12 @@ flags but higher priority than config file settings.
 
 **`NO_COLOR`**:
 
-- When set (any value), disables colored output
+- When set (any value), disables colored output and uses plain formatting
 - Follows <https://no-color.org> convention
-- Overridden by explicit `--color` flag
-- Example: `NO_COLOR=1 rex image`
+- Affects the output formatting system (see section 2.9)
+- Takes precedence over TTY detection
+- Important for accessibility (screen readers, vision impairments)
+- Example: `NO_COLOR=1 rex registry check`
 
 **`RUST_LOG`**:
 

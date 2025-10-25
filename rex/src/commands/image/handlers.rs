@@ -1,5 +1,5 @@
 use super::*;
-use crate::format::OutputFormat;
+use crate::format::{self, OutputFormat};
 
 /// Handle the image list command
 pub async fn handle_image_list(
@@ -12,7 +12,7 @@ pub async fn handle_image_list(
     let registry_url = match get_registry_url() {
         Ok(url) => url,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            format::error(&e);
             std::process::exit(1);
         }
     };
@@ -21,7 +21,7 @@ pub async fn handle_image_list(
     let images = match list_images(&registry_url, filter, limit).await {
         Ok(imgs) => imgs,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            format::error(&e);
             std::process::exit(1);
         }
     };
@@ -76,7 +76,7 @@ pub async fn handle_image_tags(
     let registry_url = match get_registry_url() {
         Ok(url) => url,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            format::error(&e);
             std::process::exit(1);
         }
     };
@@ -85,7 +85,7 @@ pub async fn handle_image_tags(
     let tags = match list_tags(&registry_url, image_name, filter, limit).await {
         Ok(tags) => tags,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            format::error(&e);
             std::process::exit(1);
         }
     };
@@ -134,7 +134,7 @@ pub async fn handle_image_details(reference: &str, format: OutputFormat) {
     let registry_url = match get_registry_url() {
         Ok(url) => url,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            format::error(&e);
             std::process::exit(1);
         }
     };
@@ -143,7 +143,7 @@ pub async fn handle_image_details(reference: &str, format: OutputFormat) {
     let details = match get_image_details(&registry_url, reference).await {
         Ok(details) => details,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            format::error(&e);
             std::process::exit(1);
         }
     };
@@ -182,7 +182,7 @@ pub async fn handle_image_inspect(
     let registry_url = match get_registry_url() {
         Ok(url) => url,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            format::error(&e);
             std::process::exit(1);
         }
     };
@@ -191,7 +191,7 @@ pub async fn handle_image_inspect(
     let inspect = match get_image_inspect(&registry_url, reference).await {
         Ok(inspect) => inspect,
         Err(e) => {
-            eprintln!("Error: {}", e);
+            format::error(&e);
             std::process::exit(1);
         }
     };
