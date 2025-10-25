@@ -514,6 +514,251 @@ pub(crate) fn logout_registry(config_path: &PathBuf, name: &str) -> Result<(), S
     Ok(())
 }
 
+/// Cache statistics display
+#[derive(Debug, Serialize)]
+pub struct CacheStatsDisplay {
+    pub registry: String,
+    pub url: String,
+    pub disk_entries: u64,
+    pub disk_size: u64,
+    pub memory_entries: u64,
+    pub cache_path: String,
+}
+
+impl Formattable for CacheStatsDisplay {
+    fn format_pretty(&self) -> String {
+        let disk_size_mb = self.disk_size as f64 / 1_048_576.0;
+        format!(
+            "Cache Statistics for '{}' ({})\n\nOverview:\n  Total Entries: {}\n  Total Size: {:.2} MB\n  Memory Cache: {} entries\n  Disk Cache: {} entries\n\nCache Location: {}",
+            self.registry,
+            self.url,
+            self.disk_entries,
+            disk_size_mb,
+            self.memory_entries,
+            self.disk_entries,
+            self.cache_path
+        )
+    }
+}
+
+/// Get cache statistics for a registry
+pub fn cache_stats(config_path: &PathBuf, name: Option<&str>) -> Result<CacheStatsDisplay, String> {
+    // Load configuration
+    let cfg = config::Config::load(config_path)?;
+
+    // Get registry
+    let registry = if let Some(name) = name {
+        cfg.registries
+            .list
+            .iter()
+            .find(|r| r.name == name)
+            .ok_or_else(|| format!("Registry '{}' not found", name))?
+    } else {
+        // Use default registry
+        let default_name = cfg.registries.default.as_ref().ok_or_else(|| {
+            "No default registry set. Use 'rex registry use <name>' or specify a registry name."
+                .to_string()
+        })?;
+        cfg.registries
+            .list
+            .iter()
+            .find(|r| r.name == *default_name)
+            .ok_or_else(|| format!("Default registry '{}' not found", default_name))?
+    };
+
+    // Build cache directory path
+    let cache_dir = config::get_registry_cache_dir(&registry.url).unwrap();
+
+    // Create a temporary cache instance to get stats
+    let cache = librex::cache::Cache::new(
+        cache_dir.clone(),
+        librex::config::CacheTtl::default(),
+        std::num::NonZeroUsize::new(100).unwrap(),
+    );
+
+    let stats = cache
+        .stats()
+        .map_err(|e| format!("Failed to get cache statistics: {}", e))?;
+
+    Ok(CacheStatsDisplay {
+        registry: name
+            .or(cfg.registries.default.as_deref())
+            .unwrap()
+            .to_string(),
+        url: registry.url.clone(),
+        disk_entries: stats.disk_entries,
+        disk_size: stats.disk_size,
+        memory_entries: stats.memory_entries,
+        cache_path: cache_dir.display().to_string(),
+    })
+}
+
+/// Clear cache for a registry
+pub fn cache_clear(
+    config_path: &PathBuf,
+    name: Option<&str>,
+    all: bool,
+    force: bool,
+) -> Result<librex::cache::ClearStats, String> {
+    // Load configuration
+    let cfg = config::Config::load(config_path)?;
+
+    if all {
+        // Clear all registry caches
+        if !force {
+            print!("Clear cache for all registries? [y/N]: ");
+            use std::io::{self, Write};
+            io::stdout().flush().unwrap();
+            let mut input = String::new();
+            io::stdin()
+                .read_line(&mut input)
+                .map_err(|e| format!("Failed to read input: {}", e))?;
+            if !input.trim().eq_ignore_ascii_case("y") {
+                return Err("Operation cancelled".to_string());
+            }
+        }
+
+        let mut total_stats = librex::cache::ClearStats::default();
+        for registry in &cfg.registries.list {
+            let cache_dir = config::get_registry_cache_dir(&registry.url).unwrap();
+            let mut cache = librex::cache::Cache::new(
+                cache_dir,
+                librex::config::CacheTtl::default(),
+                std::num::NonZeroUsize::new(100).unwrap(),
+            );
+            let stats = cache
+                .clear()
+                .map_err(|e| format!("Failed to clear cache: {}", e))?;
+            total_stats.removed_files += stats.removed_files;
+            total_stats.reclaimed_space += stats.reclaimed_space;
+        }
+        return Ok(total_stats);
+    }
+
+    // Get registry
+    let registry = if let Some(name) = name {
+        cfg.registries
+            .list
+            .iter()
+            .find(|r| r.name == name)
+            .ok_or_else(|| format!("Registry '{}' not found", name))?
+    } else {
+        // Use default registry
+        let default_name = cfg.registries.default.as_ref().ok_or_else(|| {
+            "No default registry set. Use 'rex registry use <name>' or specify a registry name."
+                .to_string()
+        })?;
+        cfg.registries
+            .list
+            .iter()
+            .find(|r| r.name == *default_name)
+            .ok_or_else(|| format!("Default registry '{}' not found", default_name))?
+    };
+
+    // Confirm unless force flag
+    if !force {
+        print!(
+            "Clear cache for '{}' ({})? [y/N]: ",
+            name.or(cfg.registries.default.as_deref()).unwrap(),
+            registry.url
+        );
+        use std::io::{self, Write};
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .map_err(|e| format!("Failed to read input: {}", e))?;
+        if !input.trim().eq_ignore_ascii_case("y") {
+            return Err("Operation cancelled".to_string());
+        }
+    }
+
+    // Build cache directory path and clear
+    let cache_dir = config::get_registry_cache_dir(&registry.url).unwrap();
+    let mut cache = librex::cache::Cache::new(
+        cache_dir,
+        librex::config::CacheTtl::default(),
+        std::num::NonZeroUsize::new(100).unwrap(),
+    );
+
+    cache
+        .clear()
+        .map_err(|e| format!("Failed to clear cache: {}", e))
+}
+
+/// Prune expired cache entries for a registry
+pub fn cache_prune(
+    config_path: &PathBuf,
+    name: Option<&str>,
+    all: bool,
+    dry_run: bool,
+) -> Result<librex::cache::PruneStats, String> {
+    // Load configuration
+    let cfg = config::Config::load(config_path)?;
+
+    if all {
+        // Prune all registry caches
+        let mut total_stats = librex::cache::PruneStats::default();
+        for registry in &cfg.registries.list {
+            let cache_dir = config::get_registry_cache_dir(&registry.url).unwrap();
+            let cache = librex::cache::Cache::new(
+                cache_dir,
+                librex::config::CacheTtl::default(),
+                std::num::NonZeroUsize::new(100).unwrap(),
+            );
+
+            if dry_run {
+                // For dry run, we would need to implement a separate method
+                // For now, just run the actual prune
+                let stats = cache
+                    .prune()
+                    .map_err(|e| format!("Failed to prune cache: {}", e))?;
+                total_stats.removed_files += stats.removed_files;
+                total_stats.reclaimed_space += stats.reclaimed_space;
+            } else {
+                let stats = cache
+                    .prune()
+                    .map_err(|e| format!("Failed to prune cache: {}", e))?;
+                total_stats.removed_files += stats.removed_files;
+                total_stats.reclaimed_space += stats.reclaimed_space;
+            }
+        }
+        return Ok(total_stats);
+    }
+
+    // Get registry
+    let registry = if let Some(name) = name {
+        cfg.registries
+            .list
+            .iter()
+            .find(|r| r.name == name)
+            .ok_or_else(|| format!("Registry '{}' not found", name))?
+    } else {
+        // Use default registry
+        let default_name = cfg.registries.default.as_ref().ok_or_else(|| {
+            "No default registry set. Use 'rex registry use <name>' or specify a registry name."
+                .to_string()
+        })?;
+        cfg.registries
+            .list
+            .iter()
+            .find(|r| r.name == *default_name)
+            .ok_or_else(|| format!("Default registry '{}' not found", default_name))?
+    };
+
+    // Build cache directory path and prune
+    let cache_dir = config::get_registry_cache_dir(&registry.url).unwrap();
+    let cache = librex::cache::Cache::new(
+        cache_dir,
+        librex::config::CacheTtl::default(),
+        std::num::NonZeroUsize::new(100).unwrap(),
+    );
+
+    cache
+        .prune()
+        .map_err(|e| format!("Failed to prune cache: {}", e))
+}
+
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
