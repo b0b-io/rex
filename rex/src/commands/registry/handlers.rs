@@ -135,6 +135,67 @@ pub fn handle_registry_logout(name: &str) {
     }
 }
 
+/// Handle the cache stats subcommand
+pub fn handle_cache_stats(name: Option<&str>, format: OutputFormat) {
+    let config_path = config::get_config_path();
+
+    match cache_stats(&config_path, name) {
+        Ok(stats) => match crate::format::format_output(&stats, format) {
+            Ok(output) => println!("{}", output),
+            Err(e) => {
+                eprintln!("Error formatting output: {}", e);
+                std::process::exit(1);
+            }
+        },
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Handle the cache clear subcommand
+pub fn handle_cache_clear(name: Option<&str>, all: bool, force: bool) {
+    let config_path = config::get_config_path();
+
+    match cache_clear(&config_path, name, all, force) {
+        Ok(stats) => {
+            println!(
+                "✓ Cleared {} entries ({} bytes)",
+                stats.removed_files, stats.reclaimed_space
+            );
+            println!("✓ Cache cleared successfully");
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Handle the cache prune subcommand
+pub fn handle_cache_prune(name: Option<&str>, all: bool, dry_run: bool) {
+    let config_path = config::get_config_path();
+
+    match cache_prune(&config_path, name, all, dry_run) {
+        Ok(stats) => {
+            if dry_run {
+                println!(
+                    "Would remove {} expired entries ({} bytes)",
+                    stats.removed_files, stats.reclaimed_space
+                );
+            } else {
+                println!("✓ Removed {} expired entries", stats.removed_files);
+                println!("✓ Freed {} bytes of disk space", stats.reclaimed_space);
+            }
+        }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "handlers_tests.rs"]
 mod tests;

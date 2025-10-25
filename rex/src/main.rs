@@ -184,6 +184,45 @@ enum RegistryCommands {
         /// Registry name
         name: String,
     },
+    /// Manage registry cache
+    Cache {
+        #[command(subcommand)]
+        command: CacheCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum CacheCommands {
+    /// Show cache statistics
+    Stats {
+        /// Registry name (optional, uses default if omitted)
+        name: Option<String>,
+        /// Output format: pretty, json, yaml
+        #[arg(short, long, default_value = "pretty")]
+        format: String,
+    },
+    /// Clear cache entries
+    Clear {
+        /// Registry name (optional, uses default if omitted)
+        name: Option<String>,
+        /// Clear cache for all registries
+        #[arg(long)]
+        all: bool,
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        force: bool,
+    },
+    /// Remove expired cache entries
+    Prune {
+        /// Registry name (optional, uses default if omitted)
+        name: Option<String>,
+        /// Prune cache for all registries
+        #[arg(long)]
+        all: bool,
+        /// Show what would be removed without actually removing
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[tokio::main]
@@ -244,6 +283,18 @@ async fn main() {
             RegistryCommands::Logout { name } => {
                 commands::registry::handlers::handle_registry_logout(&name);
             }
+            RegistryCommands::Cache { command } => match command {
+                CacheCommands::Stats { name, format } => {
+                    let fmt = format::OutputFormat::from(format.as_str());
+                    commands::registry::handlers::handle_cache_stats(name.as_deref(), fmt);
+                }
+                CacheCommands::Clear { name, all, force } => {
+                    commands::registry::handlers::handle_cache_clear(name.as_deref(), all, force);
+                }
+                CacheCommands::Prune { name, all, dry_run } => {
+                    commands::registry::handlers::handle_cache_prune(name.as_deref(), all, dry_run);
+                }
+            },
         },
         Commands::Image { command } => match command {
             ImageCommands::List {

@@ -244,6 +244,27 @@ pub fn get_default_cache_dir() -> PathBuf {
     }
 }
 
+/// Get the cache directory for a specific registry
+pub fn get_registry_cache_dir(registry_url: &str) -> Result<PathBuf, String> {
+    let config_path = get_config_path();
+
+    // Load config to get cache_dir
+    let cache_base = if let Ok(cfg) = Config::load(&config_path) {
+        PathBuf::from(cfg.cache_dir)
+    } else {
+        // Use default if config doesn't exist
+        get_default_cache_dir()
+    };
+
+    // Create a safe directory name from the registry URL
+    // Replace special characters with underscores
+    let safe_name = registry_url
+        .replace("://", "_")
+        .replace(['/', ':', '.'], "_");
+
+    Ok(cache_base.join(safe_name))
+}
+
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
