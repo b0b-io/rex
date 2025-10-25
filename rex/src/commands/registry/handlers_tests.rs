@@ -7,5 +7,4 @@ fn test_handlers_compile() {
     // This test ensures handlers module compiles correctly
     // Actual handler testing would require mocking stdout/stderr
     // or using integration tests
-    assert!(true);
 }

@@ -103,3 +103,43 @@ fn test_format_empty_vec() {
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), "");
 }
+
+#[test]
+fn test_should_color_respects_no_color_env() {
+    // Set NO_COLOR environment variable
+    unsafe {
+        std::env::set_var("NO_COLOR", "1");
+    }
+    assert!(!should_color());
+    unsafe {
+        std::env::remove_var("NO_COLOR");
+    }
+}
+
+#[test]
+fn test_checkmark_with_no_color() {
+    unsafe {
+        std::env::set_var("NO_COLOR", "1");
+    }
+    let result = checkmark();
+    assert_eq!(result, "✓");
+    unsafe {
+        std::env::remove_var("NO_COLOR");
+    }
+}
+
+#[test]
+fn test_checkmark_returns_string() {
+    // Just verify it returns a non-empty string
+    let result = checkmark();
+    assert!(!result.is_empty());
+    assert!(result.contains("✓"));
+}
+
+#[test]
+fn test_error_mark_returns_string() {
+    // Just verify it returns a non-empty string
+    let result = error_mark();
+    assert!(!result.is_empty());
+    assert!(result.contains("✗"));
+}

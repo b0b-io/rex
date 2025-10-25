@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 
 mod commands;
 mod config;
@@ -48,6 +48,12 @@ enum Commands {
         /// Limit number of results per category
         #[arg(long)]
         limit: Option<usize>,
+    },
+    /// Generate shell completion scripts
+    Completion {
+        /// Shell to generate completion for
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
     },
 }
 
@@ -392,6 +398,11 @@ async fn main() {
         } => {
             let fmt = format::OutputFormat::from(format.as_str());
             commands::search::handlers::handle_search(query.as_str(), fmt, limit).await;
+        }
+        Commands::Completion { shell } => {
+            let mut cmd = Cli::command();
+            let bin_name = cmd.get_name().to_string();
+            clap_complete::generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
         }
     }
 }
