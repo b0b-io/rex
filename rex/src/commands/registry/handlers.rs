@@ -15,9 +15,9 @@ pub fn handle_registry_init(name: &str, url: &str) {
 }
 
 /// Handle the registry remove subcommand
-pub fn handle_registry_remove(name: &str) {
+pub fn handle_registry_remove(name: &str, force: bool) {
     let config_path = config::get_config_path();
-    match remove_registry(&config_path, name) {
+    match remove_registry(&config_path, name, force) {
         Ok(_) => format::success(&format!("Removed registry '{}'", name)),
         Err(e) => {
             format::error(&e);

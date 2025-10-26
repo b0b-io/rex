@@ -29,6 +29,26 @@ pub(crate) fn no_default_registry_error(registries: &[RegistryEntry]) -> String 
     error
 }
 
+/// Helper function to prompt user for confirmation
+/// Returns Ok(()) if user confirms (enters 'y'), Err if cancelled
+pub(crate) fn confirm(prompt: &str) -> Result<(), String> {
+    use std::io::{self, Write};
+
+    print!("{} [y/N]: ", prompt);
+    io::stdout().flush().unwrap();
+
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|e| format!("Failed to read input: {}", e))?;
+
+    if input.trim().eq_ignore_ascii_case("y") {
+        Ok(())
+    } else {
+        Err("Operation cancelled".to_string())
+    }
+}
+
 /// Registry entry with default marker for display purposes
 #[derive(Debug, Tabled, Serialize)]
 pub struct RegistryDisplay {
@@ -198,9 +218,26 @@ pub(crate) fn init_registry(config_path: &PathBuf, name: &str, url: &str) -> Res
 }
 
 /// Remove a registry from the configuration
-pub(crate) fn remove_registry(config_path: &PathBuf, name: &str) -> Result<(), String> {
+pub(crate) fn remove_registry(
+    config_path: &PathBuf,
+    name: &str,
+    force: bool,
+) -> Result<(), String> {
     // Load existing config
     let mut config = config::Config::load(config_path)?;
+
+    // Find the registry
+    let registry = config
+        .registries
+        .list
+        .iter()
+        .find(|r| r.name == name)
+        .ok_or_else(|| format!("Registry '{}' not found", name))?;
+
+    // Confirm unless force flag
+    if !force {
+        confirm(&format!("Remove registry '{}' ({})?", name, registry.url))?;
+    }
 
     // Find the registry index
     let registry_index = config
@@ -208,7 +245,7 @@ pub(crate) fn remove_registry(config_path: &PathBuf, name: &str) -> Result<(), S
         .list
         .iter()
         .position(|r| r.name == name)
-        .ok_or_else(|| format!("Registry '{}' not found", name))?;
+        .unwrap(); // Safe to unwrap - we already checked it exists
 
     // Remove the registry
     config.registries.list.remove(registry_index);
@@ -640,16 +677,7 @@ pub fn cache_clear(
     if all {
         // Clear all registry caches
         if !force {
-            print!("Clear cache for all registries? [y/N]: ");
-            use std::io::{self, Write};
-            io::stdout().flush().unwrap();
-            let mut input = String::new();
-            io::stdin()
-                .read_line(&mut input)
-                .map_err(|e| format!("Failed to read input: {}", e))?;
-            if !input.trim().eq_ignore_ascii_case("y") {
-                return Err("Operation cancelled".to_string());
-            }
+            confirm("Clear cache for all registries?")?;
         }
 
         let mut total_stats = librex::cache::ClearStats::default();
@@ -692,20 +720,11 @@ pub fn cache_clear(
 
     // Confirm unless force flag
     if !force {
-        print!(
-            "Clear cache for '{}' ({})? [y/N]: ",
-            name.or(cfg.registries.default.as_deref()).unwrap(),
-            registry.url
-        );
-        use std::io::{self, Write};
-        io::stdout().flush().unwrap();
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .map_err(|e| format!("Failed to read input: {}", e))?;
-        if !input.trim().eq_ignore_ascii_case("y") {
-            return Err("Operation cancelled".to_string());
-        }
+        let registry_name = name.or(cfg.registries.default.as_deref()).unwrap();
+        confirm(&format!(
+            "Clear cache for '{}' ({})?",
+            registry_name, registry.url
+        ))?;
     }
 
     // Build cache directory path and clear
