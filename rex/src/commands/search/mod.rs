@@ -86,9 +86,9 @@ pub async fn search(query: &str, limit: Option<usize>) -> Result<SearchResults, 
             .find(|r| r.name == *default_name)
             .ok_or_else(|| format!("Default registry '{}' not found", default_name))?
     } else {
-        return Err(
-            "No default registry set. Use 'rex registry use <name>' to set one.".to_string(),
-        );
+        return Err(crate::commands::registry::no_default_registry_error(
+            &cfg.registries.list,
+        ));
     };
 
     // Get cache directory

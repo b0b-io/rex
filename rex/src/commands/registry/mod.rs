@@ -8,6 +8,27 @@ use url::Url;
 
 pub mod handlers;
 
+/// Helper function to generate enhanced "no default registry" error message
+pub(crate) fn no_default_registry_error(registries: &[RegistryEntry]) -> String {
+    let mut error = String::from("No default registry configured\n");
+
+    if registries.is_empty() {
+        error.push_str("\nNo registries available. Add one with:\n");
+        error.push_str("  rex registry init <name> <url>\n");
+        error.push_str("\nExample:\n");
+        error.push_str("  rex registry init dockerhub https://registry-1.docker.io/");
+    } else {
+        error.push_str("\nAvailable registries:\n");
+        for reg in registries {
+            error.push_str(&format!("  - {} ({})\n", reg.name, reg.url));
+        }
+        error.push_str("\nSet default with:\n");
+        error.push_str("  rex registry use <name>");
+    }
+
+    error
+}
+
 /// Registry entry with default marker for display purposes
 #[derive(Debug, Tabled, Serialize)]
 pub struct RegistryDisplay {
@@ -567,10 +588,11 @@ pub fn cache_stats(config_path: &PathBuf, name: Option<&str>) -> Result<CacheSta
             .ok_or_else(|| format!("Registry '{}' not found", name))?
     } else {
         // Use default registry
-        let default_name = cfg.registries.default.as_ref().ok_or_else(|| {
-            "No default registry set. Use 'rex registry use <name>' or specify a registry name."
-                .to_string()
-        })?;
+        let default_name = cfg
+            .registries
+            .default
+            .as_ref()
+            .ok_or_else(|| no_default_registry_error(&cfg.registries.list))?;
         cfg.registries
             .list
             .iter()
@@ -656,10 +678,11 @@ pub fn cache_clear(
             .ok_or_else(|| format!("Registry '{}' not found", name))?
     } else {
         // Use default registry
-        let default_name = cfg.registries.default.as_ref().ok_or_else(|| {
-            "No default registry set. Use 'rex registry use <name>' or specify a registry name."
-                .to_string()
-        })?;
+        let default_name = cfg
+            .registries
+            .default
+            .as_ref()
+            .ok_or_else(|| no_default_registry_error(&cfg.registries.list))?;
         cfg.registries
             .list
             .iter()
@@ -747,10 +770,11 @@ pub fn cache_prune(
             .ok_or_else(|| format!("Registry '{}' not found", name))?
     } else {
         // Use default registry
-        let default_name = cfg.registries.default.as_ref().ok_or_else(|| {
-            "No default registry set. Use 'rex registry use <name>' or specify a registry name."
-                .to_string()
-        })?;
+        let default_name = cfg
+            .registries
+            .default
+            .as_ref()
+            .ok_or_else(|| no_default_registry_error(&cfg.registries.list))?;
         cfg.registries
             .list
             .iter()
@@ -810,7 +834,7 @@ pub async fn cache_sync(
             .registries
             .default
             .as_ref()
-            .ok_or_else(|| "No default registry set.".to_string())?;
+            .ok_or_else(|| no_default_registry_error(&cfg.registries.list))?;
         cfg.registries
             .list
             .iter()
