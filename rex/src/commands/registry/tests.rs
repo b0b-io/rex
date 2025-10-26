@@ -278,7 +278,7 @@ fn test_remove_registry_existing() {
     });
     config.save(&config_path).unwrap();
 
-    let result = remove_registry(&config_path, "local");
+    let result = remove_registry(&config_path, "local", true);
     assert!(result.is_ok());
 
     let loaded = config::Config::load(&config_path).unwrap();
@@ -298,7 +298,7 @@ fn test_remove_registry_nonexistent() {
     });
     config.save(&config_path).unwrap();
 
-    let result = remove_registry(&config_path, "nonexistent");
+    let result = remove_registry(&config_path, "nonexistent", true);
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("not found"));
 }
@@ -316,7 +316,7 @@ fn test_remove_last_registry() {
     });
     config.save(&config_path).unwrap();
 
-    let result = remove_registry(&config_path, "local");
+    let result = remove_registry(&config_path, "local", true);
     assert!(result.is_ok());
 
     let loaded = config::Config::load(&config_path).unwrap();
@@ -341,7 +341,7 @@ fn test_remove_default_registry_clears_default() {
     });
     config.save(&config_path).unwrap();
 
-    let result = remove_registry(&config_path, "local");
+    let result = remove_registry(&config_path, "local", true);
     assert!(result.is_ok());
 
     let loaded = config::Config::load(&config_path).unwrap();
@@ -357,7 +357,7 @@ fn test_remove_registry_empty_config() {
     let config = config::Config::default();
     config.save(&config_path).unwrap();
 
-    let result = remove_registry(&config_path, "local");
+    let result = remove_registry(&config_path, "local", true);
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("not found"));
 }

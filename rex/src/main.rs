@@ -163,6 +163,9 @@ enum RegistryCommands {
     Remove {
         /// Registry name
         name: String,
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        force: bool,
     },
     /// Set the default registry
     Use {
@@ -285,8 +288,8 @@ async fn main() {
                 let fmt = format::OutputFormat::from(format.as_str());
                 commands::registry::handlers::handle_registry_list(fmt);
             }
-            RegistryCommands::Remove { name } => {
-                commands::registry::handlers::handle_registry_remove(&name);
+            RegistryCommands::Remove { name, force } => {
+                commands::registry::handlers::handle_registry_remove(&name, force);
             }
             RegistryCommands::Use { name } => {
                 commands::registry::handlers::handle_registry_use(&name);
