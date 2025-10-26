@@ -22,9 +22,6 @@ pub trait OutputFormatter: Send + Sync {
 
     /// Finish a progress operation with a message
     fn finish_progress(&self, pb: ProgressBar, message: &str);
-
-    /// Get a colorized checkmark if colors are supported
-    fn checkmark(&self) -> String;
 }
 
 /// TTY-aware formatter with colors and progress indicators
@@ -70,10 +67,6 @@ impl OutputFormatter for TtyFormatter {
     fn finish_progress(&self, pb: ProgressBar, message: &str) {
         pb.finish_with_message(format!("{} {}", "✓".green(), message));
     }
-
-    fn checkmark(&self) -> String {
-        format!("{}", "✓".green())
-    }
 }
 
 /// Plain text formatter for non-TTY output (piped, scripted)
@@ -105,10 +98,6 @@ impl OutputFormatter for PlainFormatter {
     fn finish_progress(&self, pb: ProgressBar, message: &str) {
         pb.finish();
         println!("✓ {}", message);
-    }
-
-    fn checkmark(&self) -> String {
-        "✓".to_string()
     }
 }
 
@@ -161,7 +150,12 @@ pub fn warning(message: &str) {
 
 /// Colorize a checkmark for success if colors are enabled
 pub fn checkmark() -> String {
-    get_formatter().checkmark()
+    // Check should_color() directly to handle NO_COLOR changes in tests
+    if should_color() {
+        format!("{}", "✓".green())
+    } else {
+        "✓".to_string()
+    }
 }
 
 /// Colorize an X mark for errors if colors are enabled
