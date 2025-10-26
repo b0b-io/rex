@@ -120,11 +120,21 @@ pub async fn search(query: &str, limit: Option<usize>) -> Result<SearchResults, 
         .await
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
+    let formatter = crate::format::create_formatter();
+
     // Search images (repositories)
-    let mut image_results = rex
-        .search_repositories(query)
-        .await
-        .map_err(|e| format!("Failed to search repositories: {}", e))?;
+    let spinner = formatter.spinner("Searching repositories...");
+    let image_results_res = rex.search_repositories(query).await;
+    let mut image_results = match image_results_res {
+        Ok(results) => {
+            formatter.finish_progress(spinner, &format!("Found {} matching images", results.len()));
+            results
+        }
+        Err(e) => {
+            spinner.finish_and_clear();
+            return Err(format!("Failed to search repositories: {}", e));
+        }
+    };
 
     // Apply limit if specified
     if let Some(limit) = limit {
@@ -132,10 +142,18 @@ pub async fn search(query: &str, limit: Option<usize>) -> Result<SearchResults, 
     }
 
     // Search tags across all images
-    let mut tag_results = rex
-        .search_images(query)
-        .await
-        .map_err(|e| format!("Failed to search tags: {}", e))?;
+    let spinner = formatter.spinner("Searching tags...");
+    let tag_results_res = rex.search_images(query).await;
+    let mut tag_results = match tag_results_res {
+        Ok(results) => {
+            formatter.finish_progress(spinner, &format!("Found {} matching tags", results.len()));
+            results
+        }
+        Err(e) => {
+            spinner.finish_and_clear();
+            return Err(format!("Failed to search tags: {}", e));
+        }
+    };
 
     // Apply limit if specified
     if let Some(limit) = limit {

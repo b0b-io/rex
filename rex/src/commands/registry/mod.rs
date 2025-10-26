@@ -866,37 +866,46 @@ async fn sync_single_registry(
     // Fetch catalog with spinner
     let spinner = formatter.spinner("Fetching catalog...");
 
-    let repos = rex
-        .list_repositories()
-        .await
-        .map_err(|e| format!("Failed to fetch catalog: {}", e))?;
-
-    formatter.finish_progress(
-        spinner,
-        &format!("Fetched catalog ({} repositories)", repos.len()),
-    );
+    let repos_res = rex.list_repositories().await;
+    let repos = match repos_res {
+        Ok(repos) => {
+            formatter.finish_progress(
+                spinner,
+                &format!("Fetched catalog ({} repositories)", repos.len()),
+            );
+            repos
+        }
+        Err(e) => {
+            spinner.finish_and_clear();
+            return Err(format!("Failed to fetch catalog: {}", e));
+        }
+    };
     stats.catalog_entries = repos.len() as u64;
 
     // Fetch tags for each repository with progress bar
     let pb = formatter.progress_bar(repos.len() as u64, "Fetching tags");
 
     let mut total_tags = 0;
-    for repo in &repos {
-        let tags = rex
-            .list_tags(repo)
-            .await
-            .map_err(|e| format!("Failed to fetch tags for {}: {}", repo, e))?;
-        total_tags += tags.len();
+    let mut errors = Vec::new();
 
-        // Fetch manifests if requested
-        if manifests {
-            for tag in &tags {
-                let reference = format!("{}:{}", repo, tag);
-                let _ = rex.get_manifest(&reference).await; // Ignore errors for individual manifests
-                stats.manifest_entries += 1;
+    for repo in &repos {
+        match rex.list_tags(repo).await {
+            Ok(tags) => {
+                total_tags += tags.len();
+
+                // Fetch manifests if requested
+                if manifests {
+                    for tag in &tags {
+                        let reference = format!("{}:{}", repo, tag);
+                        let _ = rex.get_manifest(&reference).await; // Ignore errors for individual manifests
+                        stats.manifest_entries += 1;
+                    }
+                }
+            }
+            Err(e) => {
+                errors.push(format!("{}: {}", repo, e));
             }
         }
-
         pb.inc(1);
     }
 
@@ -909,6 +918,14 @@ async fn sync_single_registry(
         ),
     );
     stats.tag_entries = total_tags as u64;
+
+    // Report errors as warnings if some succeeded
+    if !errors.is_empty() {
+        eprintln!("Warning: Failed to fetch tags for some repositories:");
+        for error in &errors {
+            eprintln!("  {}", error);
+        }
+    }
 
     if manifests {
         formatter.success(&format!("Fetched {} manifests", stats.manifest_entries));

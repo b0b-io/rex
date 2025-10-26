@@ -406,20 +406,41 @@ pub(crate) async fn list_images(
     let pb = formatter.progress_bar(repos.len() as u64, "Fetching image information");
 
     let mut images = Vec::new();
-    for repo in &repos {
-        let tags = rex
-            .list_tags(repo)
-            .await
-            .map_err(|e| format!("Failed to list tags for {}: {}", repo, e))?;
+    let mut errors = Vec::new();
 
-        images.push(ImageInfo::new(repo.clone(), tags.len(), None));
+    for repo in &repos {
+        match rex.list_tags(repo).await {
+            Ok(tags) => {
+                images.push(ImageInfo::new(repo.clone(), tags.len(), None));
+            }
+            Err(e) => {
+                errors.push(format!("{}: {}", repo, e));
+            }
+        }
         pb.inc(1);
     }
 
     formatter.finish_progress(
         pb,
-        &format!("Fetched information for {} images", repos.len()),
+        &format!("Fetched information for {} images", images.len()),
     );
+
+    // Report errors as warnings if some succeeded
+    if !errors.is_empty() {
+        if images.is_empty() {
+            // All failed - return error
+            return Err(format!(
+                "Failed to fetch tags for all images:\n  {}",
+                errors.join("\n  ")
+            ));
+        } else {
+            // Some succeeded - show warnings
+            eprintln!("Warning: Failed to fetch tags for some images:");
+            for error in &errors {
+                eprintln!("  {}", error);
+            }
+        }
+    }
 
     Ok(images)
 }
