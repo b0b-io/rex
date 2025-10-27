@@ -5,7 +5,7 @@ use std::env;
 fn test_config_default() {
     let config = Config::default();
     assert_eq!(config.style.format, OutputFormat::Pretty);
-    assert!(config.style.color);
+    assert_eq!(config.style.color, crate::format::ColorChoice::Auto);
 }
 
 #[test]
@@ -22,11 +22,11 @@ fn test_config_deserialization() {
     let toml_str = r#"
 [style]
 format = "json"
-color = false
+color = "never"
 "#;
     let config: Config = toml::from_str(toml_str).unwrap();
     assert_eq!(config.style.format, OutputFormat::Json);
-    assert!(!config.style.color);
+    assert_eq!(config.style.color, crate::format::ColorChoice::Never);
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn test_get_config_path_default() {
 fn test_style_config_defaults() {
     let style = StyleConfig::default();
     assert_eq!(style.format, OutputFormat::Pretty);
-    assert!(style.color);
+    assert_eq!(style.color, crate::format::ColorChoice::Auto);
 }
 
 #[test]
@@ -242,7 +242,7 @@ fn test_config_with_registries_deserialization() {
     let toml_str = r#"
 [style]
 format = "pretty"
-color = true
+color = "auto"
 
 [registries]
 default = "dockerhub"

@@ -97,24 +97,21 @@ impl Formattable for RegistryCheckResult {
         output.push_str(&format!("URL: {}\n", self.url));
 
         if self.online {
-            output.push_str(&format!("Status: {} Online\n", format::checkmark()));
+            output.push_str(&format!("Status: {} Online\n", "✓"));
             if let Some(ref api_version) = self.api_version {
                 output.push_str(&format!("API Version: {}\n", api_version));
             }
 
             // Show auth status
             if self.authenticated {
-                output.push_str(&format!(
-                    "Authentication: {} Authenticated\n",
-                    format::checkmark()
-                ));
+                output.push_str(&format!("Authentication: {} Authenticated\n", "✓"));
             } else if self.auth_required {
                 output.push_str("Authentication: ⚠ Required (not configured)\n");
             } else {
                 output.push_str("Authentication: ○ Not required\n");
             }
         } else {
-            output.push_str(&format!("Status: {} Offline\n", format::error_mark()));
+            output.push_str(&format!("Status: {} Offline\n", "✗"));
             if let Some(ref error) = self.error {
                 output.push_str(&format!("Reason: {}\n", error));
             }
@@ -531,8 +528,6 @@ pub(crate) async fn login_registry(
         }
     })?;
 
-    format::success("Credentials verified successfully");
-
     // Store credentials
     let creds_path = config::get_credentials_path();
     let mut store = librex::auth::FileCredentialStore::new(creds_path)
@@ -816,6 +811,7 @@ pub fn cache_prune(
 
 /// Sync cache by fetching and caching registry metadata
 pub async fn cache_sync(
+    ctx: &crate::context::AppContext,
     config_path: &PathBuf,
     name: Option<&str>,
     manifests: bool,
@@ -832,7 +828,7 @@ pub async fn cache_sync(
                 "Syncing cache for '{}' ({})...",
                 registry.name, registry.url
             );
-            let stats = sync_single_registry(&registry.url, manifests).await?;
+            let stats = sync_single_registry(ctx, &registry.url, manifests).await?;
             total_stats.catalog_entries += stats.catalog_entries;
             total_stats.tag_entries += stats.tag_entries;
             total_stats.manifest_entries += stats.manifest_entries;
@@ -867,10 +863,11 @@ pub async fn cache_sync(
         registry.url
     );
 
-    sync_single_registry(&registry.url, manifests).await
+    sync_single_registry(ctx, &registry.url, manifests).await
 }
 
 async fn sync_single_registry(
+    ctx: &crate::context::AppContext,
     registry_url: &str,
     manifests: bool,
 ) -> Result<CacheSyncStats, String> {
@@ -904,7 +901,7 @@ async fn sync_single_registry(
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
     let mut stats = CacheSyncStats::default();
-    let formatter = format::create_formatter();
+    let formatter = format::create_formatter(ctx);
 
     // Fetch catalog with spinner
     let spinner = formatter.spinner("Fetching catalog...");

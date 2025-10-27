@@ -110,7 +110,8 @@ fn test_should_color_respects_no_color_env() {
     unsafe {
         std::env::set_var("NO_COLOR", "1");
     }
-    assert!(!should_color());
+    let ctx = crate::context::AppContext::build(ColorChoice::Auto);
+    assert!(!should_color(&ctx));
     unsafe {
         std::env::remove_var("NO_COLOR");
     }
@@ -121,7 +122,8 @@ fn test_checkmark_with_no_color() {
     unsafe {
         std::env::set_var("NO_COLOR", "1");
     }
-    let result = checkmark();
+    let ctx = crate::context::AppContext::build(ColorChoice::Auto);
+    let result = checkmark(&ctx);
     assert_eq!(result, "✓");
     unsafe {
         std::env::remove_var("NO_COLOR");
@@ -131,7 +133,8 @@ fn test_checkmark_with_no_color() {
 #[test]
 fn test_checkmark_returns_string() {
     // Just verify it returns a non-empty string
-    let result = checkmark();
+    let ctx = crate::context::AppContext::build(ColorChoice::Never);
+    let result = checkmark(&ctx);
     assert!(!result.is_empty());
     assert!(result.contains("✓"));
 }
@@ -139,7 +142,8 @@ fn test_checkmark_returns_string() {
 #[test]
 fn test_error_mark_returns_string() {
     // Just verify it returns a non-empty string
-    let result = error_mark();
+    let ctx = crate::context::AppContext::build(ColorChoice::Never);
+    let result = error_mark(&ctx);
     assert!(!result.is_empty());
     assert!(result.contains("✗"));
 }

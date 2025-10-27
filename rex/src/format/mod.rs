@@ -3,6 +3,38 @@ use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 use std::io::IsTerminal;
 
+/// Color output control
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ColorChoice {
+    /// Automatically detect if colors should be used (default)
+    Auto,
+    /// Always use colors
+    Always,
+    /// Never use colors
+    Never,
+}
+
+impl From<&str> for ColorChoice {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "always" => ColorChoice::Always,
+            "never" => ColorChoice::Never,
+            _ => ColorChoice::Auto,
+        }
+    }
+}
+
+impl std::fmt::Display for ColorChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ColorChoice::Auto => write!(f, "auto"),
+            ColorChoice::Always => write!(f, "always"),
+            ColorChoice::Never => write!(f, "never"),
+        }
+    }
+}
+
 /// Trait for output formatting that can be TTY-aware or plain text
 pub trait OutputFormatter: Send + Sync {
     /// Print a success message
@@ -101,57 +133,65 @@ impl OutputFormatter for PlainFormatter {
     }
 }
 
-/// Create the appropriate formatter based on TTY and environment
-pub fn create_formatter() -> Box<dyn OutputFormatter> {
-    // Check if NO_COLOR is set
-    if std::env::var("NO_COLOR").is_ok() {
-        return Box::new(PlainFormatter);
-    }
+/// Create the appropriate formatter based on TTY, environment, and color choice
+pub fn create_formatter_with_color(color: ColorChoice) -> Box<dyn OutputFormatter> {
+    let use_color = match color {
+        ColorChoice::Always => true,
+        ColorChoice::Never => false,
+        ColorChoice::Auto => {
+            // Check if NO_COLOR is set
+            if std::env::var("NO_COLOR").is_ok() {
+                false
+            } else {
+                // Check if stdout OR stderr is a terminal (since we output to both)
+                std::io::stdout().is_terminal() || std::io::stderr().is_terminal()
+            }
+        }
+    };
 
-    // Check if stdout OR stderr is a terminal (since we output to both)
-    if std::io::stdout().is_terminal() || std::io::stderr().is_terminal() {
+    if use_color {
         Box::new(TtyFormatter)
     } else {
         Box::new(PlainFormatter)
     }
 }
 
-// Legacy helper functions that use a lazily created formatter
-// These are kept for backward compatibility
-
-use std::sync::OnceLock;
-
-static FORMATTER: OnceLock<Box<dyn OutputFormatter>> = OnceLock::new();
-
-fn get_formatter() -> &'static dyn OutputFormatter {
-    FORMATTER.get_or_init(|| create_formatter()).as_ref()
+/// Create the appropriate formatter from context
+pub fn create_formatter(ctx: &crate::context::AppContext) -> Box<dyn OutputFormatter> {
+    create_formatter_with_color(ctx.config.style.color)
 }
 
-/// Check if we should use colors in output
-pub fn should_color() -> bool {
-    std::io::stdout().is_terminal() && std::env::var("NO_COLOR").is_err()
+/// Check if we should use colors in output based on context
+pub fn should_color(ctx: &crate::context::AppContext) -> bool {
+    match ctx.config.style.color {
+        ColorChoice::Always => true,
+        ColorChoice::Never => false,
+        ColorChoice::Auto => std::io::stdout().is_terminal() && std::env::var("NO_COLOR").is_err(),
+    }
 }
 
 /// Print a success message with optional coloring
-pub fn success(message: &str) {
-    get_formatter().success(message);
+pub fn success(ctx: &crate::context::AppContext, message: &str) {
+    let formatter = create_formatter(ctx);
+    formatter.success(message);
 }
 
 /// Print an error message with optional coloring
-pub fn error(message: &str) {
-    get_formatter().error(message);
+pub fn error(ctx: &crate::context::AppContext, message: &str) {
+    let formatter = create_formatter(ctx);
+    formatter.error(message);
 }
 
 /// Print a warning message with optional coloring
 #[allow(dead_code)]
-pub fn warning(message: &str) {
-    get_formatter().warning(message);
+pub fn warning(ctx: &crate::context::AppContext, message: &str) {
+    let formatter = create_formatter(ctx);
+    formatter.warning(message);
 }
 
 /// Colorize a checkmark for success if colors are enabled
-pub fn checkmark() -> String {
-    // Check should_color() directly to handle NO_COLOR changes in tests
-    if should_color() {
+pub fn checkmark(ctx: &crate::context::AppContext) -> String {
+    if should_color(ctx) {
         format!("{}", "✓".green())
     } else {
         "✓".to_string()
@@ -160,8 +200,8 @@ pub fn checkmark() -> String {
 
 /// Colorize an X mark for errors if colors are enabled
 #[allow(dead_code)]
-pub fn error_mark() -> String {
-    if should_color() {
+pub fn error_mark(ctx: &crate::context::AppContext) -> String {
+    if should_color(ctx) {
         format!("{}", "✗".red())
     } else {
         "✗".to_string()

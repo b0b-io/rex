@@ -77,6 +77,79 @@ subcommands. When invoked without a subcommand, it displays help information.
 Global options can be specified before any subcommand and affect all
 operations.
 
+#### 2.2.1 Configuration Precedence and AppContext
+
+Rex implements a canonical configuration precedence system through the `AppContext` struct. All configuration is resolved once at startup and passed read-only throughout the application.
+
+**Configuration Precedence Order** (highest to lowest):
+
+1. **CLI flags**: Command-line arguments (e.g., `--color always`)
+2. **Environment variables**: Shell environment (e.g., `REX_COLOR=always`)
+3. **Configuration file**: `~/.config/rex/config.toml`
+4. **Default values**: Built-in defaults
+
+**AppContext Architecture**:
+
+```rust
+pub struct AppContext {
+    pub config: Config,  // Resolved configuration
+}
+
+impl AppContext {
+    pub fn build(cli_color: ColorChoice) -> Self {
+        // 1. Start with defaults
+        let mut config = Config::default();
+
+        // 2. Load and merge config file
+        if let Ok(file_config) = Config::load(&config_path) {
+            config = file_config;
+        }
+
+        // 3. Apply environment variable overrides
+        if let Ok(color) = env::var("REX_COLOR") {
+            config.style.color = ColorChoice::from(color.as_str());
+        }
+
+        // 4. Apply CLI flag overrides (highest priority)
+        if cli_color != ColorChoice::Auto {
+            config.style.color = cli_color;
+        }
+
+        Self { config }
+    }
+}
+```
+
+**Design Principles**:
+
+- **Single Resolution**: Configuration is resolved once at startup in `main()`
+- **Read-Only Context**: Context is passed as `&AppContext` throughout the application
+- **No Shortcuts**: All functions receive context explicitly, no global state or environment variable side channels
+- **Explicit Over Implicit**: Clear data flow from CLI → context → handlers → formatters
+
+**Benefits**:
+
+- Consistent behavior across all commands
+- Easy to test (inject context with known configuration)
+- Clear precedence rules that users can reason about
+- No hidden state or unexpected behavior from environment
+
+**Example Usage**:
+
+```rust
+// In main.rs
+let ctx = AppContext::build(
+    format::ColorChoice::from(cli.color.as_str())
+);
+
+// Pass to all handlers
+commands::image::handle_image_list(&ctx, fmt, quiet, filter, limit).await;
+
+// Handlers pass to formatters
+let formatter = format::create_formatter(&ctx);
+formatter.success("Operation completed");
+```
+
 #### Registry Selection
 
 **`--registry, -r <URL>`**
@@ -121,15 +194,10 @@ operations.
 - Control colored output
 - Values: `auto`, `always`, `never`
 - Default: `auto` (colors when stdout is TTY)
+- Follows configuration precedence order (see section 2.2.1)
 - Examples:
   - `rex --color always repos`
   - `rex --color never repos`
-
-**`--no-color`**
-
-- Disable colored output
-- Alias for `--color never`
-- Example: `rex --no-color repos`
 
 #### Verbosity
 
@@ -228,10 +296,9 @@ rex config --format json
 **Output** (pretty format):
 
 ```text
-Output:
+Style:
   format = pretty (default)
   color = auto (default)
-  quiet = false (default)
 
 Network:
   timeout = 30 (default)
@@ -305,11 +372,10 @@ Set a configuration value.
 
 **Configuration Keys**:
 
-**Output Section** (`output.*`):
+**Style Section** (`style.*`):
 
-- `output.format`: Default output format (`pretty`, `json`, `yaml`)
-- `output.color`: Color output behavior (`auto`, `always`, `never`)
-- `output.quiet`: Suppress visual feedback (`true`, `false`)
+- `style.format`: Default output format (`pretty`, `json`, `yaml`)
+- `style.color`: Color output behavior (`auto`, `always`, `never`)
 
 **Network Section** (`network.*`):
 
@@ -342,10 +408,10 @@ Set a configuration value.
 
 ```bash
 # Set default output format to JSON
-rex config set output.format json
+rex config set style.format json
 
 # Enable colored output always
-rex config set output.color always
+rex config set style.color always
 
 # Set network timeout to 60 seconds
 rex config set network.timeout 60
@@ -363,7 +429,7 @@ rex config set tui.vim_bindings true
 **Output**:
 
 ```text
-✓ Set output.format = json
+✓ Set style.format = json
 ```
 
 #### `rex config edit`
@@ -393,10 +459,9 @@ EDITOR=code rex config edit
 **Configuration File Format**:
 
 ```toml
-[output]
+[style]
 format = "pretty"
-color = "auto"
-quiet = false
+color = "auto"  # Values: "auto", "always", "never"
 
 [network]
 timeout = 30
@@ -2127,7 +2192,8 @@ flags but higher priority than config file settings.
 - Control colored output
 - Values: `auto`, `always`, `never`
 - Default: `auto`
-- Overridden by: `--color` flag or `NO_COLOR`
+- Precedence: CLI flag > environment > config file > default
+- `NO_COLOR` takes precedence over all settings
 - Example: `REX_COLOR=never rex image`
 
 **`REX_TIMEOUT`**:
