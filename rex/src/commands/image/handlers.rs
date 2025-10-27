@@ -3,6 +3,7 @@ use crate::format::{self, OutputFormat};
 
 /// Handle the image list command
 pub async fn handle_image_list(
+    ctx: &crate::context::AppContext,
     format: OutputFormat,
     quiet: bool,
     filter: Option<&str>,
@@ -12,16 +13,16 @@ pub async fn handle_image_list(
     let registry_url = match get_registry_url() {
         Ok(url) => url,
         Err(e) => {
-            format::error(&e);
+            format::error(ctx, &e);
             std::process::exit(1);
         }
     };
 
     // List images
-    let images = match list_images(&registry_url, filter, limit).await {
+    let images = match list_images(ctx, &registry_url, filter, limit).await {
         Ok(imgs) => imgs,
         Err(e) => {
-            format::error(&e);
+            format::error(ctx, &e);
             std::process::exit(1);
         }
     };
@@ -66,6 +67,7 @@ pub async fn handle_image_list(
 
 /// Handle the image tags command (list tags for a specific image)
 pub async fn handle_image_tags(
+    ctx: &crate::context::AppContext,
     image_name: &str,
     format: OutputFormat,
     quiet: bool,
@@ -76,7 +78,7 @@ pub async fn handle_image_tags(
     let registry_url = match get_registry_url() {
         Ok(url) => url,
         Err(e) => {
-            format::error(&e);
+            format::error(ctx, &e);
             std::process::exit(1);
         }
     };
@@ -85,7 +87,7 @@ pub async fn handle_image_tags(
     let tags = match list_tags(&registry_url, image_name, filter, limit).await {
         Ok(tags) => tags,
         Err(e) => {
-            format::error(&e);
+            format::error(ctx, &e);
             std::process::exit(1);
         }
     };
@@ -129,12 +131,16 @@ pub async fn handle_image_tags(
 }
 
 /// Handle the image details command (show details for image:tag or image@digest)
-pub async fn handle_image_details(reference: &str, format: OutputFormat) {
+pub async fn handle_image_details(
+    ctx: &crate::context::AppContext,
+    reference: &str,
+    format: OutputFormat,
+) {
     // Get registry URL from config
     let registry_url = match get_registry_url() {
         Ok(url) => url,
         Err(e) => {
-            format::error(&e);
+            format::error(ctx, &e);
             std::process::exit(1);
         }
     };
@@ -143,7 +149,7 @@ pub async fn handle_image_details(reference: &str, format: OutputFormat) {
     let details = match get_image_details(&registry_url, reference).await {
         Ok(details) => details,
         Err(e) => {
-            format::error(&e);
+            format::error(ctx, &e);
             std::process::exit(1);
         }
     };
@@ -172,6 +178,7 @@ pub async fn handle_image_details(reference: &str, format: OutputFormat) {
 
 /// Handle the image inspect command (full detailed inspection)
 pub async fn handle_image_inspect(
+    ctx: &crate::context::AppContext,
     reference: &str,
     format: OutputFormat,
     _platform: Option<&str>,
@@ -182,7 +189,7 @@ pub async fn handle_image_inspect(
     let registry_url = match get_registry_url() {
         Ok(url) => url,
         Err(e) => {
-            format::error(&e);
+            format::error(ctx, &e);
             std::process::exit(1);
         }
     };
@@ -191,7 +198,7 @@ pub async fn handle_image_inspect(
     let inspect = match get_image_inspect(&registry_url, reference).await {
         Ok(inspect) => inspect,
         Err(e) => {
-            format::error(&e);
+            format::error(ctx, &e);
             std::process::exit(1);
         }
     };

@@ -74,20 +74,22 @@ impl Formattable for SearchResults {
 }
 
 /// Perform unified search across images and tags
-pub async fn search(query: &str, limit: Option<usize>) -> Result<SearchResults, String> {
-    let config_path = config::get_config_path();
-    let cfg = config::Config::load(&config_path)?;
-
-    // Get the default registry
-    let registry = if let Some(default_name) = &cfg.registries.default {
-        cfg.registries
+pub async fn search(
+    ctx: &crate::context::AppContext,
+    query: &str,
+    limit: Option<usize>,
+) -> Result<SearchResults, String> {
+    // Get the default registry from context config
+    let registry = if let Some(default_name) = &ctx.config.registries.default {
+        ctx.config
+            .registries
             .list
             .iter()
             .find(|r| r.name == *default_name)
             .ok_or_else(|| format!("Default registry '{}' not found", default_name))?
     } else {
         return Err(crate::commands::registry::no_default_registry_error(
-            &cfg.registries.list,
+            &ctx.config.registries.list,
         ));
     };
 
@@ -120,7 +122,7 @@ pub async fn search(query: &str, limit: Option<usize>) -> Result<SearchResults, 
         .await
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
-    let formatter = crate::format::create_formatter();
+    let formatter = crate::format::create_formatter(ctx);
 
     // Search images (repositories)
     let spinner = formatter.spinner("Searching repositories...");

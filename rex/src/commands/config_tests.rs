@@ -9,7 +9,7 @@ fn test_config_format_pretty() {
     let output = config.format_pretty();
     assert!(output.contains("[style]"));
     assert!(output.contains("format = \"pretty\""));
-    assert!(output.contains("color = true"));
+    assert!(output.contains("color = auto"));
     assert!(output.contains("[registries]"));
 }
 

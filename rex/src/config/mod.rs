@@ -1,4 +1,4 @@
-use crate::format::OutputFormat;
+use crate::format::{ColorChoice, OutputFormat};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
@@ -39,24 +39,24 @@ pub struct StyleConfig {
     /// Output format: pretty, json, yaml
     #[serde(default = "default_format")]
     pub format: OutputFormat,
-    /// Enable color output
+    /// Color output control: auto, always, never
     #[serde(default = "default_color")]
-    pub color: bool,
+    pub color: ColorChoice,
 }
 
 fn default_format() -> OutputFormat {
     OutputFormat::Pretty
 }
 
-fn default_color() -> bool {
-    true
+fn default_color() -> ColorChoice {
+    ColorChoice::Auto
 }
 
 impl Default for StyleConfig {
     fn default() -> Self {
         Self {
             format: OutputFormat::Pretty,
-            color: true,
+            color: ColorChoice::Auto,
         }
     }
 }
@@ -170,9 +170,7 @@ pub fn set_config_value(config_path: &PathBuf, key: &str, value: &str) -> Result
             config.style.format = OutputFormat::from(value);
         }
         ["style", "color"] => {
-            config.style.color = value.parse::<bool>().map_err(|_| {
-                format!("Invalid boolean value '{}'. Use 'true' or 'false'.", value)
-            })?;
+            config.style.color = ColorChoice::from(value);
         }
         ["cache_dir"] => {
             config.cache_dir = value.to_string();

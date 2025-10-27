@@ -344,6 +344,7 @@ impl Formattable for ImageInspect {
 ///
 /// Returns a vector of ImageInfo structs with repository information
 pub(crate) async fn list_images(
+    ctx: &crate::context::AppContext,
     registry_url: &str,
     filter: Option<&str>,
     limit: Option<usize>,
@@ -402,7 +403,7 @@ pub(crate) async fn list_images(
 
     // For each repository, get tag count
     // TODO: In the future, we could also fetch last updated time from manifest metadata
-    let formatter = crate::format::create_formatter();
+    let formatter = crate::format::create_formatter(ctx);
     let pb = formatter.progress_bar(repos.len() as u64, "Fetching image information");
 
     let mut images = Vec::new();

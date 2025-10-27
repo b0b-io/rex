@@ -2,6 +2,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 
 mod commands;
 mod config;
+mod context;
 mod format;
 
 /// Rex - Container Registry Explorer
@@ -14,6 +15,10 @@ struct Cli {
     /// Verbose output
     #[arg(short, long, global = true)]
     verbose: bool,
+
+    /// Control colored output: auto, always, never
+    #[arg(long, global = true, default_value = "auto")]
+    color: String,
 
     #[command(subcommand)]
     command: Commands,
@@ -263,44 +268,47 @@ enum CacheCommands {
 async fn main() {
     let cli = Cli::parse();
 
+    // Build context with precedence: defaults > config file > env vars > CLI flags
+    let ctx = context::AppContext::build(format::ColorChoice::from(cli.color.as_str()));
+
     match cli.command {
         Commands::Version => {
             commands::version::print_version();
         }
         Commands::Config { command } => match command {
-            ConfigCommands::Init => commands::config::handle_init(),
+            ConfigCommands::Init => commands::config::handle_init(&ctx),
             ConfigCommands::Get { key, format } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::config::handle_get(key.as_deref(), fmt);
+                commands::config::handle_get(&ctx, key.as_deref(), fmt);
             }
             ConfigCommands::Set { key, value } => {
-                commands::config::handle_set(key.as_deref(), value.as_deref());
+                commands::config::handle_set(&ctx, key.as_deref(), value.as_deref());
             }
             ConfigCommands::Edit => {
-                commands::config::handle_set(None, None);
+                commands::config::handle_set(&ctx, None, None);
             }
         },
         Commands::Registry { command } => match command {
             RegistryCommands::Init { name, url } => {
-                commands::registry::handlers::handle_registry_init(&name, &url);
+                commands::registry::handlers::handle_registry_init(&ctx, &name, &url);
             }
             RegistryCommands::List { format } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::registry::handlers::handle_registry_list(fmt);
+                commands::registry::handlers::handle_registry_list(&ctx, fmt);
             }
             RegistryCommands::Remove { name, force } => {
-                commands::registry::handlers::handle_registry_remove(&name, force);
+                commands::registry::handlers::handle_registry_remove(&ctx, &name, force);
             }
             RegistryCommands::Use { name } => {
-                commands::registry::handlers::handle_registry_use(&name);
+                commands::registry::handlers::handle_registry_use(&ctx, &name);
             }
             RegistryCommands::Show { name, format } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::registry::handlers::handle_registry_show(&name, fmt);
+                commands::registry::handlers::handle_registry_show(&ctx, &name, fmt);
             }
             RegistryCommands::Check { name, format } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::registry::handlers::handle_registry_check(&name, fmt).await;
+                commands::registry::handlers::handle_registry_check(&ctx, &name, fmt).await;
             }
             RegistryCommands::Login {
                 name,
@@ -308,6 +316,7 @@ async fn main() {
                 password,
             } => {
                 commands::registry::handlers::handle_registry_login(
+                    &ctx,
                     &name,
                     username.as_deref(),
                     password.as_deref(),
@@ -315,18 +324,28 @@ async fn main() {
                 .await;
             }
             RegistryCommands::Logout { name } => {
-                commands::registry::handlers::handle_registry_logout(&name);
+                commands::registry::handlers::handle_registry_logout(&ctx, &name);
             }
             RegistryCommands::Cache { command } => match command {
                 CacheCommands::Stats { name, format } => {
                     let fmt = format::OutputFormat::from(format.as_str());
-                    commands::registry::handlers::handle_cache_stats(name.as_deref(), fmt);
+                    commands::registry::handlers::handle_cache_stats(&ctx, name.as_deref(), fmt);
                 }
                 CacheCommands::Clear { name, all, force } => {
-                    commands::registry::handlers::handle_cache_clear(name.as_deref(), all, force);
+                    commands::registry::handlers::handle_cache_clear(
+                        &ctx,
+                        name.as_deref(),
+                        all,
+                        force,
+                    );
                 }
                 CacheCommands::Prune { name, all, dry_run } => {
-                    commands::registry::handlers::handle_cache_prune(name.as_deref(), all, dry_run);
+                    commands::registry::handlers::handle_cache_prune(
+                        &ctx,
+                        name.as_deref(),
+                        all,
+                        dry_run,
+                    );
                 }
                 CacheCommands::Sync {
                     name,
@@ -335,6 +354,7 @@ async fn main() {
                     force,
                 } => {
                     commands::registry::handlers::handle_cache_sync(
+                        &ctx,
                         name.as_deref(),
                         manifests,
                         all,
@@ -352,8 +372,14 @@ async fn main() {
                 limit,
             } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::image::handlers::handle_image_list(fmt, quiet, filter.as_deref(), limit)
-                    .await;
+                commands::image::handlers::handle_image_list(
+                    &ctx,
+                    fmt,
+                    quiet,
+                    filter.as_deref(),
+                    limit,
+                )
+                .await;
             }
             ImageCommands::Tags {
                 name,
@@ -364,6 +390,7 @@ async fn main() {
             } => {
                 let fmt = format::OutputFormat::from(format.as_str());
                 commands::image::handlers::handle_image_tags(
+                    &ctx,
                     name.as_str(),
                     fmt,
                     quiet,
@@ -374,7 +401,8 @@ async fn main() {
             }
             ImageCommands::Show { reference, format } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::image::handlers::handle_image_details(reference.as_str(), fmt).await;
+                commands::image::handlers::handle_image_details(&ctx, reference.as_str(), fmt)
+                    .await;
             }
             ImageCommands::Inspect {
                 reference,
@@ -385,6 +413,7 @@ async fn main() {
             } => {
                 let fmt = format::OutputFormat::from(format.as_str());
                 commands::image::handlers::handle_image_inspect(
+                    &ctx,
                     reference.as_str(),
                     fmt,
                     platform.as_deref(),
@@ -400,7 +429,7 @@ async fn main() {
             limit,
         } => {
             let fmt = format::OutputFormat::from(format.as_str());
-            commands::search::handlers::handle_search(query.as_str(), fmt, limit).await;
+            commands::search::handlers::handle_search(&ctx, query.as_str(), fmt, limit).await;
         }
         Commands::Completion { shell } => {
             let mut cmd = Cli::command();
