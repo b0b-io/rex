@@ -1,10 +1,23 @@
 use super::*;
 use crate::config;
+use crate::context::VerbosityLevel;
 use crate::format::{self, OutputFormat};
 
 /// Handle the registry init subcommand
 pub fn handle_registry_init(ctx: &crate::context::AppContext, name: &str, url: &str) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        &format!("Initializing registry '{}' with URL: {}", name, url),
+    );
+
     let config_path = config::get_config_path();
+    format::print(
+        ctx,
+        VerbosityLevel::VeryVerbose,
+        &format!("Config path: {}", config_path.display()),
+    );
+
     match init_registry(&config_path, name, url) {
         Ok(_) => format::success(ctx, &format!("Initialized registry '{}' at {}", name, url)),
         Err(e) => {
@@ -16,6 +29,12 @@ pub fn handle_registry_init(ctx: &crate::context::AppContext, name: &str, url: &
 
 /// Handle the registry remove subcommand
 pub fn handle_registry_remove(ctx: &crate::context::AppContext, name: &str, force: bool) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        &format!("Removing registry '{}'...", name),
+    );
+
     let config_path = config::get_config_path();
     match remove_registry(&config_path, name, force) {
         Ok(_) => format::success(ctx, &format!("Removed registry '{}'", name)),
@@ -28,6 +47,12 @@ pub fn handle_registry_remove(ctx: &crate::context::AppContext, name: &str, forc
 
 /// Handle the registry use subcommand
 pub fn handle_registry_use(ctx: &crate::context::AppContext, name: &str) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        &format!("Setting '{}' as default registry...", name),
+    );
+
     let config_path = config::get_config_path();
     match use_registry(&config_path, name) {
         Ok(_) => format::success(ctx, &format!("Set '{}' as default registry", name)),
@@ -40,6 +65,12 @@ pub fn handle_registry_use(ctx: &crate::context::AppContext, name: &str) {
 
 /// Handle the registry show subcommand
 pub fn handle_registry_show(ctx: &crate::context::AppContext, name: &str, format: OutputFormat) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        &format!("Retrieving registry '{}' details...", name),
+    );
+
     let config_path = config::get_config_path();
     match show_registry(&config_path, name) {
         Ok(registry) => match crate::format::format_output(&registry, format) {
@@ -58,6 +89,12 @@ pub fn handle_registry_show(ctx: &crate::context::AppContext, name: &str, format
 
 /// Handle the registry list subcommand
 pub fn handle_registry_list(ctx: &crate::context::AppContext, format: OutputFormat) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        "Listing configured registries...",
+    );
+
     let config_path = config::get_config_path();
     match list_registries(&config_path) {
         Ok(registries) => {
@@ -102,7 +139,7 @@ pub async fn handle_registry_check(
     format: OutputFormat,
 ) {
     let config_path = config::get_config_path();
-    let result = check_registry(&config_path, name).await;
+    let result = check_registry(ctx, &config_path, name).await;
 
     match crate::format::format_output(&result, format) {
         Ok(output) => println!("{}", output),
@@ -120,6 +157,12 @@ pub async fn handle_registry_login(
     username: Option<&str>,
     password: Option<&str>,
 ) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        &format!("Logging in to registry '{}'...", name),
+    );
+
     let config_path = config::get_config_path();
 
     match login_registry(&config_path, name, username, password).await {
@@ -133,6 +176,12 @@ pub async fn handle_registry_login(
 
 /// Handle the registry logout subcommand
 pub fn handle_registry_logout(ctx: &crate::context::AppContext, name: &str) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        &format!("Logging out from registry '{}'...", name),
+    );
+
     let config_path = config::get_config_path();
 
     match logout_registry(&config_path, name) {
@@ -150,6 +199,12 @@ pub fn handle_cache_stats(
     name: Option<&str>,
     format: OutputFormat,
 ) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        "Calculating cache statistics...",
+    );
+
     let config_path = config::get_config_path();
 
     match cache_stats(&config_path, name) {
@@ -174,6 +229,8 @@ pub fn handle_cache_clear(
     all: bool,
     force: bool,
 ) {
+    format::print(ctx, VerbosityLevel::Verbose, "Clearing cache...");
+
     let config_path = config::get_config_path();
 
     match cache_clear(&config_path, name, all, force) {
@@ -200,6 +257,16 @@ pub fn handle_cache_prune(
     all: bool,
     dry_run: bool,
 ) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        if dry_run {
+            "Calculating what would be pruned from cache..."
+        } else {
+            "Pruning expired cache entries..."
+        },
+    );
+
     let config_path = config::get_config_path();
 
     match cache_prune(&config_path, name, all, dry_run) {
@@ -235,6 +302,12 @@ pub async fn handle_cache_sync(
     all: bool,
     force: bool,
 ) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        "Syncing cache with registry...",
+    );
+
     let config_path = config::get_config_path();
 
     match cache_sync(ctx, &config_path, name, manifests, all, force).await {

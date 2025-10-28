@@ -1,5 +1,6 @@
 use crate::config;
-use crate::format::Formattable;
+use crate::context::VerbosityLevel;
+use crate::format::{self, Formattable};
 use librex::auth::CredentialStore;
 use serde::Serialize;
 
@@ -92,6 +93,12 @@ pub async fn search(
             &ctx.config.registries.list,
         ));
     };
+
+    format::print(
+        ctx,
+        VerbosityLevel::VeryVerbose,
+        &format!("Using registry: {} ({})", registry.name, registry.url),
+    );
 
     // Get cache directory
     let cache_dir = config::get_registry_cache_dir(&registry.url)?;

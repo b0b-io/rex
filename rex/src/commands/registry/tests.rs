@@ -515,7 +515,11 @@ async fn test_check_registry_nonexistent() {
     let config = config::Config::default();
     config.save(&config_path).unwrap();
 
-    let result = check_registry(&config_path, "nonexistent").await;
+    let ctx = crate::context::AppContext::build(
+        crate::format::ColorChoice::Auto,
+        crate::context::VerbosityLevel::Normal,
+    );
+    let result = check_registry(&ctx, &config_path, "nonexistent").await;
     assert!(!result.online);
     assert!(result.error.unwrap().contains("not found in configuration"));
 }
@@ -524,7 +528,11 @@ async fn test_check_registry_nonexistent() {
 async fn test_check_registry_invalid_config() {
     let config_path = std::path::PathBuf::from("/tmp/nonexistent_check_config.toml");
 
-    let result = check_registry(&config_path, "test").await;
+    let ctx = crate::context::AppContext::build(
+        crate::format::ColorChoice::Auto,
+        crate::context::VerbosityLevel::Normal,
+    );
+    let result = check_registry(&ctx, &config_path, "test").await;
     assert!(!result.online);
     assert!(result.error.unwrap().contains("Configuration error"));
 }

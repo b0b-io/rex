@@ -1,4 +1,5 @@
 use super::*;
+use crate::context::VerbosityLevel;
 use crate::format::{self, OutputFormat};
 
 /// Handle the image list command
@@ -9,6 +10,19 @@ pub async fn handle_image_list(
     filter: Option<&str>,
     limit: Option<usize>,
 ) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        "Listing images from registry...",
+    );
+    if let Some(pattern) = filter {
+        format::print(
+            ctx,
+            VerbosityLevel::Verbose,
+            &format!("Applying filter: {}", pattern),
+        );
+    }
+
     // Get registry URL from config
     let registry_url = match get_registry_url() {
         Ok(url) => url,
@@ -74,6 +88,19 @@ pub async fn handle_image_tags(
     filter: Option<&str>,
     limit: Option<usize>,
 ) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        &format!("Listing tags for image: {}", image_name),
+    );
+    if let Some(pattern) = filter {
+        format::print(
+            ctx,
+            VerbosityLevel::Verbose,
+            &format!("Applying filter: {}", pattern),
+        );
+    }
+
     // Get registry URL from config
     let registry_url = match get_registry_url() {
         Ok(url) => url,
@@ -136,6 +163,12 @@ pub async fn handle_image_details(
     reference: &str,
     format: OutputFormat,
 ) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        &format!("Fetching details for: {}", reference),
+    );
+
     // Get registry URL from config
     let registry_url = match get_registry_url() {
         Ok(url) => url,
@@ -185,6 +218,12 @@ pub async fn handle_image_inspect(
     _raw_manifest: bool,
     _raw_config: bool,
 ) {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        &format!("Inspecting image: {}", reference),
+    );
+
     // Get registry URL from config
     let registry_url = match get_registry_url() {
         Ok(url) => url,

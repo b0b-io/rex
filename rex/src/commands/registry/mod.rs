@@ -1,4 +1,5 @@
 use crate::config::{self, RegistryEntry};
+use crate::context::VerbosityLevel;
 use crate::format::{self, Formattable};
 use librex::auth::CredentialStore;
 use serde::Serialize;
@@ -330,8 +331,23 @@ pub(crate) fn list_registries(config_path: &PathBuf) -> Result<Vec<RegistryDispl
 }
 
 /// Check registry connectivity and status
-pub(crate) async fn check_registry(config_path: &PathBuf, name: &str) -> RegistryCheckResult {
+pub(crate) async fn check_registry(
+    ctx: &crate::context::AppContext,
+    config_path: &PathBuf,
+    name: &str,
+) -> RegistryCheckResult {
+    format::print(
+        ctx,
+        VerbosityLevel::Verbose,
+        &format!("Checking registry '{}'...", name),
+    );
+
     // Load config
+    format::print(
+        ctx,
+        VerbosityLevel::VeryVerbose,
+        &format!("Loading config from: {}", config_path.display()),
+    );
     let config = match config::Config::load(config_path) {
         Ok(cfg) => cfg,
         Err(e) => {
@@ -387,6 +403,11 @@ pub(crate) async fn check_registry(config_path: &PathBuf, name: &str) -> Registr
     };
 
     // Create client and check version
+    format::print(
+        ctx,
+        VerbosityLevel::VeryVerbose,
+        &format!("Connecting to registry at: {}", registry.url),
+    );
     let client = match librex::client::Client::new(&registry.url, credentials) {
         Ok(c) => c,
         Err(e) => {
