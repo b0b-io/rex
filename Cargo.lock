@@ -1680,6 +1680,7 @@ dependencies = [
 name = "rex"
 version = "0.0.1"
 dependencies = [
+ "chrono",
  "clap",
  "clap_complete",
  "dirs",
