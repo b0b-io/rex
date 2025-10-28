@@ -1,5 +1,6 @@
 use crate::config;
-use crate::format::Formattable;
+use crate::context::VerbosityLevel;
+use crate::format::{self, Formattable};
 use librex::auth::CredentialStore;
 use serde::Serialize;
 use std::str::FromStr;
@@ -349,6 +350,12 @@ pub(crate) async fn list_images(
     filter: Option<&str>,
     limit: Option<usize>,
 ) -> Result<Vec<ImageInfo>, String> {
+    format::print(
+        ctx,
+        VerbosityLevel::VeryVerbose,
+        &format!("Connecting to registry: {}", registry_url),
+    );
+
     // Get cache directory from config (per-registry subdirectory)
     let cache_dir = get_registry_cache_dir(registry_url)?;
 
@@ -379,6 +386,16 @@ pub(crate) async fn list_images(
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
     // List repositories
+    format::print(
+        ctx,
+        VerbosityLevel::VeryVerbose,
+        if filter.is_some() {
+            "Searching repositories..."
+        } else {
+            "Fetching repository list..."
+        },
+    );
+
     let repos = if let Some(pattern) = filter {
         // Use fuzzy search if filter is provided
         rex.search_repositories(pattern)

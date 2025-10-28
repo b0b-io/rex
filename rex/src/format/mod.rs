@@ -189,6 +189,23 @@ pub fn warning(ctx: &crate::context::AppContext, message: &str) {
     formatter.warning(message);
 }
 
+/// Print a message at the specified verbosity level
+///
+/// Messages are printed to stderr if the current verbosity level is >= the required level.
+/// - Normal: Always printed (use success/error/warning instead)
+/// - Verbose: Printed at -v, -vv, -vvv
+/// - VeryVerbose: Printed at -vv, -vvv
+/// - Trace: Printed only at -vvv
+pub fn print(
+    ctx: &crate::context::AppContext,
+    level: crate::context::VerbosityLevel,
+    message: &str,
+) {
+    if ctx.verbosity >= level {
+        eprintln!("{}", message);
+    }
+}
+
 /// Colorize a checkmark for success if colors are enabled
 pub fn checkmark(ctx: &crate::context::AppContext) -> String {
     if should_color(ctx) {

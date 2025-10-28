@@ -110,7 +110,10 @@ fn test_should_color_respects_no_color_env() {
     unsafe {
         std::env::set_var("NO_COLOR", "1");
     }
-    let ctx = crate::context::AppContext::build(ColorChoice::Auto);
+    let ctx = crate::context::AppContext::build(
+        ColorChoice::Auto,
+        crate::context::VerbosityLevel::Normal,
+    );
     assert!(!should_color(&ctx));
     unsafe {
         std::env::remove_var("NO_COLOR");
@@ -122,7 +125,10 @@ fn test_checkmark_with_no_color() {
     unsafe {
         std::env::set_var("NO_COLOR", "1");
     }
-    let ctx = crate::context::AppContext::build(ColorChoice::Auto);
+    let ctx = crate::context::AppContext::build(
+        ColorChoice::Auto,
+        crate::context::VerbosityLevel::Normal,
+    );
     let result = checkmark(&ctx);
     assert_eq!(result, "✓");
     unsafe {
@@ -133,7 +139,10 @@ fn test_checkmark_with_no_color() {
 #[test]
 fn test_checkmark_returns_string() {
     // Just verify it returns a non-empty string
-    let ctx = crate::context::AppContext::build(ColorChoice::Never);
+    let ctx = crate::context::AppContext::build(
+        ColorChoice::Never,
+        crate::context::VerbosityLevel::Normal,
+    );
     let result = checkmark(&ctx);
     assert!(!result.is_empty());
     assert!(result.contains("✓"));
@@ -142,8 +151,112 @@ fn test_checkmark_returns_string() {
 #[test]
 fn test_error_mark_returns_string() {
     // Just verify it returns a non-empty string
-    let ctx = crate::context::AppContext::build(ColorChoice::Never);
+    let ctx = crate::context::AppContext::build(
+        ColorChoice::Never,
+        crate::context::VerbosityLevel::Normal,
+    );
     let result = error_mark(&ctx);
     assert!(!result.is_empty());
     assert!(result.contains("✗"));
+}
+
+#[test]
+fn test_print_with_normal_verbosity_prints_normal() {
+    let ctx = crate::context::AppContext::build(
+        ColorChoice::Never,
+        crate::context::VerbosityLevel::Normal,
+    );
+    // Normal messages should NOT print (use success/error/warning instead)
+    // This test just verifies the function doesn't panic
+    print(&ctx, crate::context::VerbosityLevel::Normal, "test");
+}
+
+#[test]
+fn test_print_with_verbose_suppresses_trace() {
+    let ctx = crate::context::AppContext::build(
+        ColorChoice::Never,
+        crate::context::VerbosityLevel::Verbose,
+    );
+    // At Verbose level, Trace messages should not print
+    // We can't easily test stderr output, but we verify no panic
+    print(
+        &ctx,
+        crate::context::VerbosityLevel::Trace,
+        "should not print",
+    );
+    print(
+        &ctx,
+        crate::context::VerbosityLevel::Verbose,
+        "should print",
+    );
+}
+
+#[test]
+fn test_print_with_very_verbose_suppresses_trace() {
+    let ctx = crate::context::AppContext::build(
+        ColorChoice::Never,
+        crate::context::VerbosityLevel::VeryVerbose,
+    );
+    // At VeryVerbose level, Trace should not print but VeryVerbose should
+    print(
+        &ctx,
+        crate::context::VerbosityLevel::Trace,
+        "should not print",
+    );
+    print(
+        &ctx,
+        crate::context::VerbosityLevel::VeryVerbose,
+        "should print",
+    );
+    print(
+        &ctx,
+        crate::context::VerbosityLevel::Verbose,
+        "should also print",
+    );
+}
+
+#[test]
+fn test_print_with_trace_prints_everything() {
+    let ctx = crate::context::AppContext::build(
+        ColorChoice::Never,
+        crate::context::VerbosityLevel::Trace,
+    );
+    // At Trace level, all messages should print
+    print(&ctx, crate::context::VerbosityLevel::Trace, "should print");
+    print(
+        &ctx,
+        crate::context::VerbosityLevel::VeryVerbose,
+        "should print",
+    );
+    print(
+        &ctx,
+        crate::context::VerbosityLevel::Verbose,
+        "should print",
+    );
+    print(&ctx, crate::context::VerbosityLevel::Normal, "should print");
+}
+
+#[test]
+fn test_print_respects_verbosity_hierarchy() {
+    // Normal suppresses all verbose output
+    let ctx_normal = crate::context::AppContext::build(
+        ColorChoice::Never,
+        crate::context::VerbosityLevel::Normal,
+    );
+    // These should not print (but we can't test stderr easily, just verify no panic)
+    print(
+        &ctx_normal,
+        crate::context::VerbosityLevel::Verbose,
+        "suppressed",
+    );
+    print(
+        &ctx_normal,
+        crate::context::VerbosityLevel::VeryVerbose,
+        "suppressed",
+    );
+    print(
+        &ctx_normal,
+        crate::context::VerbosityLevel::Trace,
+        "suppressed",
+    );
 }

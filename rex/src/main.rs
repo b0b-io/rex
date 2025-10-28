@@ -12,9 +12,9 @@ mod format;
 #[command(name = "rex")]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// Verbose output
-    #[arg(short, long, global = true)]
-    verbose: bool,
+    /// Verbose output (can be repeated: -v, -vv, -vvv)
+    #[arg(short, long, global = true, action = clap::ArgAction::Count)]
+    verbose: u8,
 
     /// Control colored output: auto, always, never
     #[arg(long, global = true, default_value = "auto")]
@@ -269,7 +269,10 @@ async fn main() {
     let cli = Cli::parse();
 
     // Build context with precedence: defaults > config file > env vars > CLI flags
-    let ctx = context::AppContext::build(format::ColorChoice::from(cli.color.as_str()));
+    let ctx = context::AppContext::build(
+        format::ColorChoice::from(cli.color.as_str()),
+        context::VerbosityLevel::from_count(cli.verbose),
+    );
 
     match cli.command {
         Commands::Version => {
