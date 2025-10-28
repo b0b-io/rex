@@ -2,45 +2,24 @@ use super::*;
 
 #[test]
 fn test_image_info_creation() {
-    let image = ImageInfo::new("alpine".to_string(), 5, Some("2 hours ago".to_string()));
+    let image = ImageInfo::new("alpine".to_string(), 5);
 
     assert_eq!(image.name, "alpine");
     assert_eq!(image.tags, 5);
-    assert_eq!(image.last_updated, "2 hours ago");
-}
-
-#[test]
-fn test_image_info_creation_no_timestamp() {
-    let image = ImageInfo::new("nginx".to_string(), 12, None);
-
-    assert_eq!(image.name, "nginx");
-    assert_eq!(image.tags, 12);
-    assert_eq!(image.last_updated, "N/A");
 }
 
 #[test]
 fn test_image_info_format_pretty() {
-    let image = ImageInfo::new("nginx".to_string(), 12, Some("1 day ago".to_string()));
+    let image = ImageInfo::new("nginx".to_string(), 12);
 
     let formatted = image.format_pretty();
     assert!(formatted.contains("nginx"));
     assert!(formatted.contains("12"));
-    assert!(formatted.contains("1 day ago"));
-}
-
-#[test]
-fn test_image_info_format_pretty_no_timestamp() {
-    let image = ImageInfo::new("postgres".to_string(), 8, None);
-
-    let formatted = image.format_pretty();
-    assert!(formatted.contains("postgres"));
-    assert!(formatted.contains("8"));
-    assert!(formatted.contains("N/A"));
 }
 
 #[test]
 fn test_image_info_serialization() {
-    let image = ImageInfo::new("redis".to_string(), 3, Some("3 days ago".to_string()));
+    let image = ImageInfo::new("redis".to_string(), 3);
 
     let json = serde_json::to_string(&image).unwrap();
     assert!(json.contains("\"name\":\"redis\""));
@@ -59,25 +38,140 @@ fn test_get_registry_url_default() {
 
 #[test]
 fn test_tag_info_creation() {
-    let tag = TagInfo::new("latest".to_string());
+    use chrono::{DateTime, Utc};
+    let created = DateTime::parse_from_rfc3339("2025-01-15T10:30:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let tag = TagInfo::new(
+        "latest".to_string(),
+        "sha256:abc123def456".to_string(),
+        1024000,
+        Some(created),
+        vec!["linux/amd64".to_string()],
+    );
 
     assert_eq!(tag.tag, "latest");
+    // Digest should be 12 chars (short format)
+    assert_eq!(tag.digest, "abc123def456");
+    assert!(tag.size.contains("MiB") || tag.size.contains("KiB"));
+    assert!(!tag.created.is_empty());
+    assert!(tag.platforms.contains("linux/amd64"));
 }
 
 #[test]
 fn test_tag_info_format_pretty() {
-    let tag = TagInfo::new("v1.2.3".to_string());
+    use chrono::{DateTime, Utc};
+    let created = DateTime::parse_from_rfc3339("2025-01-15T10:30:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let tag = TagInfo::new(
+        "v1.2.3".to_string(),
+        "sha256:xyz789".to_string(),
+        2048000,
+        Some(created),
+        vec!["linux/amd64".to_string(), "linux/arm64".to_string()],
+    );
 
     let formatted = tag.format_pretty();
-    assert_eq!(formatted, "v1.2.3");
+    assert!(formatted.contains("v1.2.3"));
+    // Should contain 12-char short digest
+    assert!(formatted.contains("xyz789"));
 }
 
 #[test]
 fn test_tag_info_serialization() {
-    let tag = TagInfo::new("3.19".to_string());
+    use chrono::{DateTime, Utc};
+    let created = DateTime::parse_from_rfc3339("2025-01-15T10:30:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let tag = TagInfo::new(
+        "3.19".to_string(),
+        "sha256:multi123".to_string(),
+        5120000,
+        Some(created),
+        vec!["linux/amd64".to_string()],
+    );
 
     let json = serde_json::to_string(&tag).unwrap();
     assert!(json.contains("\"tag\":\"3.19\""));
+    assert!(json.contains("digest"));
+    assert!(json.contains("size"));
+    assert!(json.contains("created"));
+    assert!(json.contains("platforms"));
+}
+
+#[test]
+fn test_tag_info_with_many_platforms() {
+    let tag = TagInfo::new(
+        "latest".to_string(),
+        "sha256:multi123".to_string(),
+        1024000,
+        None,
+        vec![
+            "linux/amd64".to_string(),
+            "linux/arm64".to_string(),
+            "linux/arm/v7".to_string(),
+        ],
+    );
+
+    // Should show count for more than 2 platforms
+    assert!(tag.platforms.contains("3 platforms"));
+}
+
+#[test]
+fn test_tag_info_without_created() {
+    let tag = TagInfo::new(
+        "latest".to_string(),
+        "sha256:abc123".to_string(),
+        1024000,
+        None,
+        vec!["linux/amd64".to_string()],
+    );
+
+    assert_eq!(tag.created, "N/A");
+}
+
+#[test]
+fn test_tag_info_digest_shortening() {
+    // Test with full sha256 digest
+    let tag1 = TagInfo::new(
+        "latest".to_string(),
+        "sha256:c5b1261d6d3e43071626931fc004f70149baeba2c8ec672bd4f27761f8e1ad6b".to_string(),
+        1024000,
+        None,
+        vec!["linux/amd64".to_string()],
+    );
+    assert_eq!(tag1.digest, "c5b1261d6d3e");
+
+    // Test with N/A digest
+    let tag2 = TagInfo::new(
+        "latest".to_string(),
+        "N/A".to_string(),
+        1024000,
+        None,
+        vec!["linux/amd64".to_string()],
+    );
+    assert_eq!(tag2.digest, "N/A");
+
+    // Test with short digest
+    let tag3 = TagInfo::new(
+        "latest".to_string(),
+        "sha256:abc123".to_string(),
+        1024000,
+        None,
+        vec!["linux/amd64".to_string()],
+    );
+    assert_eq!(tag3.digest, "abc123");
+
+    // Test with placeholder digest
+    let tag4 = TagInfo::new(
+        "latest".to_string(),
+        "sha256:...".to_string(),
+        1024000,
+        None,
+        vec!["linux/amd64".to_string()],
+    );
+    assert_eq!(tag4.digest, "...");
 }
 
 #[test]
@@ -89,6 +183,7 @@ fn test_image_details_creation() {
         1024000,
         vec!["linux/amd64".to_string()],
         5,
+        Some("2025-01-15T10:30:00Z".to_string()),
     );
 
     assert_eq!(details.reference, "alpine:latest");
@@ -97,6 +192,7 @@ fn test_image_details_creation() {
     assert_eq!(details.size, 1024000);
     assert_eq!(details.platforms, vec!["linux/amd64"]);
     assert_eq!(details.layers, 5);
+    assert_eq!(details.created, Some("2025-01-15T10:30:00Z".to_string()));
 }
 
 #[test]
@@ -108,6 +204,7 @@ fn test_image_details_multi_platform() {
         5120000,
         vec!["linux/amd64".to_string(), "linux/arm64".to_string()],
         2,
+        None,
     );
 
     assert_eq!(details.reference, "nginx:latest");
@@ -126,6 +223,7 @@ fn test_image_details_format_pretty() {
         2048000,
         vec!["linux/amd64".to_string()],
         8,
+        None,
     );
 
     let formatted = details.format_pretty();
@@ -150,14 +248,14 @@ fn test_image_details_format_pretty_multi_platform() {
             "linux/arm/v7".to_string(),
         ],
         3,
+        None,
     );
 
     let formatted = details.format_pretty();
     assert!(formatted.contains("postgres:15"));
-    assert!(formatted.contains("Platforms:"));
-    assert!(formatted.contains("linux/amd64"));
-    assert!(formatted.contains("linux/arm64"));
-    assert!(formatted.contains("linux/arm/v7"));
+    assert!(formatted.contains("OCI Image Index (multi-platform)"));
+    assert!(formatted.contains("Platform: 3 platforms")); // Multi-platform shows count
+    assert!(formatted.contains("Layers: 3"));
 }
 
 #[test]
@@ -169,6 +267,7 @@ fn test_image_details_serialization() {
         512000,
         vec!["linux/amd64".to_string()],
         3,
+        None,
     );
 
     let json = serde_json::to_string(&details).unwrap();
@@ -190,6 +289,7 @@ fn test_image_details_byte_formatting() {
         512,
         vec![],
         1,
+        None,
     );
     let formatted = details_bytes.format_pretty();
     assert!(formatted.contains("512 B"));
@@ -202,6 +302,7 @@ fn test_image_details_byte_formatting() {
         2048,
         vec![],
         1,
+        None,
     );
     let formatted = details_kb.format_pretty();
     assert!(formatted.contains("2.00 KB"));
@@ -214,6 +315,7 @@ fn test_image_details_byte_formatting() {
         2097152,
         vec![],
         1,
+        None,
     );
     let formatted = details_mb.format_pretty();
     assert!(formatted.contains("2.00 MB"));
@@ -226,6 +328,7 @@ fn test_image_details_byte_formatting() {
         3221225472,
         vec![],
         1,
+        None,
     );
     let formatted = details_gb.format_pretty();
     assert!(formatted.contains("3.00 GB"));

@@ -58,8 +58,8 @@ pub async fn handle_image_list(
     // Format output
     match format {
         OutputFormat::Pretty => {
-            use tabled::Table;
-            let table = Table::new(&images).to_string();
+            use tabled::{Table, settings::Style};
+            let table = Table::new(&images).with(Style::empty()).to_string();
             println!("{}", table);
         }
         OutputFormat::Json => match serde_json::to_string_pretty(&images) {
@@ -136,8 +136,8 @@ pub async fn handle_image_tags(
     // Format output
     match format {
         OutputFormat::Pretty => {
-            use tabled::Table;
-            let table = Table::new(&tags).to_string();
+            use tabled::{Table, settings::Style};
+            let table = Table::new(&tags).with(Style::empty()).to_string();
             println!("{}", table);
         }
         OutputFormat::Json => match serde_json::to_string_pretty(&tags) {

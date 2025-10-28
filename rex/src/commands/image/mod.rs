@@ -17,25 +17,18 @@ pub struct ImageInfo {
     /// Number of tags
     #[tabled(rename = "TAGS")]
     pub tags: usize,
-    /// Last updated timestamp
-    #[tabled(rename = "LAST UPDATED")]
-    pub last_updated: String,
 }
 
 impl ImageInfo {
     /// Create a new ImageInfo
-    pub fn new(name: String, tags: usize, last_updated: Option<String>) -> Self {
-        Self {
-            name,
-            tags,
-            last_updated: last_updated.unwrap_or_else(|| "N/A".to_string()),
-        }
+    pub fn new(name: String, tags: usize) -> Self {
+        Self { name, tags }
     }
 }
 
 impl Formattable for ImageInfo {
     fn format_pretty(&self) -> String {
-        format!("{:20} {:5} {}", self.name, self.tags, self.last_updated)
+        format!("{:40} {}", self.name, self.tags)
     }
 }
 
@@ -45,18 +38,81 @@ pub struct TagInfo {
     /// Tag name
     #[tabled(rename = "TAG")]
     pub tag: String,
+    /// Manifest digest (truncated for display)
+    #[tabled(rename = "DIGEST")]
+    pub digest: String,
+    /// Total size (formatted for display)
+    #[tabled(rename = "SIZE")]
+    pub size: String,
+    /// Created timestamp (relative format)
+    #[tabled(rename = "CREATED")]
+    pub created: String,
+    /// Platform(s) available
+    #[tabled(rename = "PLATFORM")]
+    pub platforms: String,
+    /// Raw created timestamp for sorting (not displayed in table)
+    #[tabled(skip)]
+    #[serde(skip)]
+    pub created_timestamp: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl TagInfo {
     /// Create a new TagInfo
-    pub fn new(tag: String) -> Self {
-        Self { tag }
+    pub fn new(
+        tag: String,
+        digest: String,
+        size: u64,
+        created: Option<chrono::DateTime<chrono::Utc>>,
+        platforms: Vec<String>,
+    ) -> Self {
+        // Extract short digest (12 hex chars after sha256:) for compact display
+        let digest_display = if digest == "sha256:..." {
+            // Placeholder digest when actual digest is not available
+            "...".to_string()
+        } else if digest == "N/A" {
+            "N/A".to_string()
+        } else if let Some(hex_part) = digest.strip_prefix("sha256:") {
+            // Extract up to 12 chars after "sha256:" prefix
+            hex_part.chars().take(12).collect()
+        } else {
+            // Fallback for other formats - take first 12 chars
+            digest.chars().take(12).collect()
+        };
+
+        // Format size using librex format module
+        let size_display = librex::format::format_size(size);
+
+        // Format created time using librex format module
+        let created_display = created
+            .map(|c| librex::format::format_timestamp(&c))
+            .unwrap_or_else(|| "N/A".to_string());
+
+        // Format platforms (comma-separated or show count if > 2)
+        let platforms_display = if platforms.is_empty() {
+            "N/A".to_string()
+        } else if platforms.len() <= 2 {
+            platforms.join(", ")
+        } else {
+            format!("{} platforms", platforms.len())
+        };
+
+        Self {
+            tag,
+            digest: digest_display,
+            size: size_display,
+            created: created_display,
+            platforms: platforms_display,
+            created_timestamp: created,
+        }
     }
 }
 
 impl Formattable for TagInfo {
     fn format_pretty(&self) -> String {
-        self.tag.clone()
+        format!(
+            "{:10} {:12} {:9} {:15} {}",
+            self.tag, self.digest, self.size, self.created, self.platforms
+        )
     }
 }
 
@@ -75,6 +131,8 @@ pub struct ImageDetails {
     pub platforms: Vec<String>,
     /// Number of layers
     pub layers: usize,
+    /// Created timestamp
+    pub created: Option<String>,
 }
 
 impl ImageDetails {
@@ -86,6 +144,7 @@ impl ImageDetails {
         size: u64,
         platforms: Vec<String>,
         layers: usize,
+        created: Option<String>,
     ) -> Self {
         Self {
             reference,
@@ -94,6 +153,7 @@ impl ImageDetails {
             size,
             platforms,
             layers,
+            created,
         }
     }
 }
@@ -116,20 +176,41 @@ impl Formattable for ImageDetails {
             }
         }
 
+        fn format_timestamp(timestamp: &str) -> String {
+            use chrono::{DateTime, Local};
+
+            // Parse the RFC3339 timestamp and convert to local timezone
+            if let Ok(dt) = DateTime::parse_from_rfc3339(timestamp) {
+                let local: DateTime<Local> = dt.with_timezone(&Local);
+                local.format("%Y-%m-%d %H:%M:%S %Z").to_string()
+            } else {
+                timestamp.to_string()
+            }
+        }
+
         let mut output = String::new();
         output.push_str(&format!("Image: {}\n", self.reference));
+
+        if let Some(created) = &self.created {
+            output.push_str(&format!("Created: {}\n", format_timestamp(created)));
+        }
+
         output.push_str(&format!("Digest: {}\n", self.digest));
         output.push_str(&format!("Type: {}\n", self.manifest_type));
         output.push_str(&format!("Size: {}\n", format_bytes(self.size)));
 
         if !self.platforms.is_empty() {
-            output.push_str("\nPlatforms:\n");
-            for platform in &self.platforms {
-                output.push_str(&format!("  {}\n", platform));
-            }
+            output.push_str(&format!(
+                "Platform: {}\n",
+                if self.platforms.len() == 1 {
+                    self.platforms[0].clone()
+                } else {
+                    format!("{} platforms", self.platforms.len())
+                }
+            ));
         }
 
-        output.push_str(&format!("\nLayers: {}\n", self.layers));
+        output.push_str(&format!("Layers: {}\n", self.layers));
 
         output
     }
@@ -418,8 +499,7 @@ pub(crate) async fn list_images(
         repos
     };
 
-    // For each repository, get tag count
-    // TODO: In the future, we could also fetch last updated time from manifest metadata
+    // For each repository, get tag count and latest tag info
     let formatter = crate::format::create_formatter(ctx);
     let pb = formatter.progress_bar(repos.len() as u64, "Fetching image information");
 
@@ -429,7 +509,7 @@ pub(crate) async fn list_images(
     for repo in &repos {
         match rex.list_tags(repo).await {
             Ok(tags) => {
-                images.push(ImageInfo::new(repo.clone(), tags.len(), None));
+                images.push(ImageInfo::new(repo.clone(), tags.len()));
             }
             Err(e) => {
                 errors.push(format!("{}: {}", repo, e));
@@ -533,8 +613,84 @@ pub(crate) async fn list_tags(
         tags
     };
 
-    // Convert to TagInfo
-    let tag_infos = tags.into_iter().map(TagInfo::new).collect();
+    // Fetch manifest details for each tag
+    let mut tag_infos = Vec::new();
+    for tag in tags {
+        // Fetch manifest for this tag
+        let reference = format!("{}:{}", image_name, tag);
+
+        match rex.get_manifest(&reference).await {
+            Ok(manifest_or_index) => {
+                // Extract details based on manifest type
+                let (size, platforms, created) = match &manifest_or_index {
+                    librex::oci::ManifestOrIndex::Manifest(manifest) => {
+                        let total_size: u64 =
+                            manifest.layers().iter().map(|layer| layer.size()).sum();
+
+                        // Get config to extract platform and created timestamp
+                        let config_digest_str = manifest.config().digest().to_string();
+                        let config_digest = librex::digest::Digest::from_str(&config_digest_str)
+                            .map_err(|e| format!("Invalid config digest: {}", e))?;
+
+                        let config_bytes = rex
+                            .get_blob(image_name, &config_digest)
+                            .await
+                            .map_err(|e| format!("Failed to get config blob: {}", e))?;
+
+                        let config: librex::oci::ImageConfiguration =
+                            serde_json::from_slice(&config_bytes)
+                                .map_err(|e| format!("Failed to parse config: {}", e))?;
+
+                        let platform = vec![format!("{}/{}", config.os(), config.architecture())];
+                        // Parse created timestamp from ISO 8601 string to DateTime
+                        let created_ts = config.created().as_ref().and_then(|ts| {
+                            chrono::DateTime::parse_from_rfc3339(ts)
+                                .ok()
+                                .map(|dt| dt.with_timezone(&chrono::Utc))
+                        });
+
+                        (total_size, platform, created_ts)
+                    }
+                    librex::oci::ManifestOrIndex::Index(index) => {
+                        let total_size: u64 = index.manifests().iter().map(|m| m.size()).sum();
+                        let platforms: Vec<String> = index
+                            .manifests()
+                            .iter()
+                            .filter_map(|m| {
+                                m.platform()
+                                    .as_ref()
+                                    .map(|p| format!("{}/{}", p.os(), p.architecture()))
+                            })
+                            .collect();
+
+                        (total_size, platforms, None)
+                    }
+                };
+
+                // For now, use a placeholder digest since we can't easily get it from ManifestOrIndex
+                // TODO: Enhance librex to return digest along with manifest
+                let digest = "sha256:...".to_string();
+
+                tag_infos.push(TagInfo::new(tag, digest, size, created, platforms));
+            }
+            Err(e) => {
+                // If we can't fetch manifest, create a minimal TagInfo
+                eprintln!("Warning: Failed to fetch manifest for {}: {}", reference, e);
+                tag_infos.push(TagInfo::new(tag, "N/A".to_string(), 0, None, vec![]));
+            }
+        }
+    }
+
+    // Sort by created timestamp in reverse chronological order (newest first)
+    // Tags without timestamps are placed at the end
+    tag_infos.sort_by(|a, b| {
+        match (&a.created_timestamp, &b.created_timestamp) {
+            (Some(time_a), Some(time_b)) => time_b.cmp(time_a), // Reverse order (newest first)
+            (Some(_), None) => std::cmp::Ordering::Less,        // Tags with timestamp come first
+            (None, Some(_)) => std::cmp::Ordering::Greater,     // Tags without timestamp go last
+            (None, None) => a.tag.cmp(&b.tag),                  // Sort by tag name if both None
+        }
+    });
 
     Ok(tag_infos)
 }
@@ -593,14 +749,14 @@ pub(crate) async fn get_image_details(
         .map_err(|e| format!("Failed to fetch manifest: {}", e))?;
 
     // Extract details based on manifest type
-    let (manifest_type, size, platforms, layers) = match manifest_or_index {
+    let (manifest_type, size, platforms, layers, created) = match manifest_or_index {
         librex::oci::ManifestOrIndex::Manifest(manifest) => {
             // Single-platform image
             let total_size: u64 = manifest.layers().iter().map(|layer| layer.size()).sum();
             let layer_count = manifest.layers().len();
 
-            // Get platform from config blob
-            let platform = {
+            // Get platform and created date from config blob
+            let (platform, created_timestamp) = {
                 // Parse config digest
                 let config_digest_str = manifest.config().digest().to_string();
                 let config_digest = librex::digest::Digest::from_str(&config_digest_str)
@@ -616,8 +772,11 @@ pub(crate) async fn get_image_details(
                 let config: librex::oci::ImageConfiguration = serde_json::from_slice(&config_bytes)
                     .map_err(|e| format!("Failed to parse config: {}", e))?;
 
-                // Extract platform info
-                vec![format!("{}/{}", config.os(), config.architecture())]
+                // Extract platform info and created timestamp
+                let platform = vec![format!("{}/{}", config.os(), config.architecture())];
+                let created = config.created().as_ref().map(|c| c.to_string());
+
+                (platform, created)
             };
 
             (
@@ -625,6 +784,7 @@ pub(crate) async fn get_image_details(
                 total_size,
                 platform,
                 layer_count,
+                created_timestamp,
             )
         }
         librex::oci::ManifestOrIndex::Index(index) => {
@@ -644,11 +804,13 @@ pub(crate) async fn get_image_details(
 
             let layer_count = index.manifests().len();
 
+            // Multi-platform images don't have a single created date at the index level
             (
                 "OCI Image Index (multi-platform)".to_string(),
                 total_size,
                 platforms,
                 layer_count,
+                None,
             )
         }
     };
@@ -666,6 +828,7 @@ pub(crate) async fn get_image_details(
         size,
         platforms,
         layers,
+        created,
     ))
 }
 
