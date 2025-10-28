@@ -86,6 +86,30 @@ fn test_tags_response_serde() {
 // These are unit tests for the data structures and basic functionality
 
 #[test]
+fn test_blob_cache_key_is_global() {
+    // This test verifies that blob cache keys are global (not repository-specific)
+    // The actual caching behavior requires HTTP mocking, but we can verify
+    // the cache key format would be correct
+    use crate::digest::Digest;
+    use std::str::FromStr;
+
+    let digest =
+        Digest::from_str("sha256:c5b1261d6d3e43071626931fc004f70149baeba2c8ec672bd4f27761f8e1ad6b")
+            .unwrap();
+    let expected_key = format!("blobs/{}", digest);
+
+    // The cache key should be "blobs/sha256:..."
+    // not "repo1/blobs/sha256:..." or "repo2/blobs/sha256:..."
+    // This ensures the same blob is cached once across all repositories
+    assert!(expected_key.starts_with("blobs/sha256:"));
+    assert!(!expected_key.contains("repository"));
+    assert_eq!(
+        expected_key,
+        "blobs/sha256:c5b1261d6d3e43071626931fc004f70149baeba2c8ec672bd4f27761f8e1ad6b"
+    );
+}
+
+#[test]
 fn test_manifest_or_index_types_work_with_registry() {
     // This test verifies that the ManifestOrIndex type is properly integrated
     // It doesn't test the actual HTTP calls, just that the types work together

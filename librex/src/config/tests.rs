@@ -13,8 +13,10 @@ fn test_default_config() {
 
     // Verify default cache settings
     assert!(config.cache.enabled);
-    assert_eq!(config.cache.ttl.catalog, 300);
+    assert_eq!(config.cache.ttl.catalog, 3600);
+    assert_eq!(config.cache.ttl.tags, 1800);
     assert_eq!(config.cache.ttl.manifest, 86400);
+    assert_eq!(config.cache.ttl.config, 31536000);
     assert_eq!(config.cache.limits.memory_entries, 1000);
 
     // Verify default TUI settings

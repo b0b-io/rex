@@ -202,19 +202,19 @@ impl Default for CacheTtl {
 }
 
 fn default_cache_ttl_catalog() -> u64 {
-    300
+    3600 // 1 hour - repositories don't change frequently
 }
 
 fn default_cache_ttl_tags() -> u64 {
-    300
+    1800 // 30 minutes - tags can be pushed during development
 }
 
 fn default_cache_ttl_manifest() -> u64 {
-    86400
+    86400 // 1 day - reasonable for tag-based lookups
 }
 
 fn default_cache_ttl_config() -> u64 {
-    86400
+    31536000 // 365 days - effectively forever (immutable, content-addressed)
 }
 
 /// Cache size limits.

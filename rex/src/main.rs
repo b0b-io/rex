@@ -252,7 +252,7 @@ enum CacheCommands {
     Sync {
         /// Registry name (optional, uses default if omitted)
         name: Option<String>,
-        /// Also fetch and cache image manifests
+        /// Also fetch and cache image manifests and config blobs
         #[arg(long)]
         manifests: bool,
         /// Sync cache for all registries

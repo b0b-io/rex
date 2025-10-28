@@ -4,6 +4,7 @@ use crate::format::{self, Formattable};
 use librex::auth::CredentialStore;
 use serde::Serialize;
 use std::path::PathBuf;
+use std::str::FromStr;
 use tabled::Tabled;
 use url::Url;
 
@@ -624,6 +625,7 @@ pub struct CacheSyncStats {
     pub catalog_entries: u64,
     pub tag_entries: u64,
     pub manifest_entries: u64,
+    pub config_entries: u64,
     pub total_size: u64,
 }
 
@@ -853,6 +855,7 @@ pub async fn cache_sync(
             total_stats.catalog_entries += stats.catalog_entries;
             total_stats.tag_entries += stats.tag_entries;
             total_stats.manifest_entries += stats.manifest_entries;
+            total_stats.config_entries += stats.config_entries;
             total_stats.total_size += stats.total_size;
         }
         return Ok(total_stats);
@@ -954,12 +957,27 @@ async fn sync_single_registry(
             Ok(tags) => {
                 total_tags += tags.len();
 
-                // Fetch manifests if requested
+                // Fetch manifests and configs if requested
+                // Note: Due to Rust's borrow checker, we process these sequentially
+                // but the actual fetches are fast due to caching
                 if manifests {
                     for tag in &tags {
                         let reference = format!("{}:{}", repo, tag);
-                        let _ = rex.get_manifest(&reference).await; // Ignore errors for individual manifests
-                        stats.manifest_entries += 1;
+                        // Fetch manifest
+                        if let Ok(manifest_or_index) = rex.get_manifest(&reference).await {
+                            stats.manifest_entries += 1;
+
+                            // Fetch config blob if this is a manifest (not an index)
+                            if let Some(manifest) = manifest_or_index.as_manifest() {
+                                let config_digest_str = manifest.config().digest().to_string();
+                                if let Ok(config_digest) =
+                                    librex::digest::Digest::from_str(&config_digest_str)
+                                {
+                                    let _ = rex.get_blob(repo, &config_digest).await; // Cache the config blob
+                                    stats.config_entries += 1;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -989,7 +1007,10 @@ async fn sync_single_registry(
     }
 
     if manifests {
-        formatter.success(&format!("Fetched {} manifests", stats.manifest_entries));
+        formatter.success(&format!(
+            "Fetched {} manifests and {} config blobs",
+            stats.manifest_entries, stats.config_entries
+        ));
     }
 
     // Get final cache size

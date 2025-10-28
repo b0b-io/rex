@@ -69,13 +69,13 @@ impl TagInfo {
         let digest_display = if digest == "sha256:..." {
             // Placeholder digest when actual digest is not available
             "...".to_string()
+        } else if digest.starts_with("sha256:") && digest.len() >= 19 {
+            // Extract 12 chars after "sha256:" prefix (7 + 12 = 19)
+            digest[7..19].to_string()
         } else if digest == "N/A" {
             "N/A".to_string()
-        } else if let Some(hex_part) = digest.strip_prefix("sha256:") {
-            // Extract up to 12 chars after "sha256:" prefix
-            hex_part.chars().take(12).collect()
         } else {
-            // Fallback for other formats - take first 12 chars
+            // Fallback for other formats
             digest.chars().take(12).collect()
         };
 

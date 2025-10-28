@@ -259,6 +259,10 @@ impl Registry {
 
     /// Retrieves a blob (layer or config) by digest.
     ///
+    /// Blobs are immutable and content-addressed by digest. They are cached
+    /// globally (independent of repository/registry) since the same digest
+    /// always represents the same content.
+    ///
     /// # Arguments
     ///
     /// * `repository` - The repository name
@@ -287,9 +291,28 @@ impl Registry {
     /// # }
     /// ```
     pub async fn get_blob(&mut self, repository: &str, digest: &Digest) -> Result<Vec<u8>> {
-        self.client
+        // Cache key is global (not repository-specific) since blobs are content-addressed
+        let cache_key = format!("blobs/{}", digest);
+
+        // Try cache first
+        if let Some(cache) = &mut self.cache
+            && let Some(cached_bytes) = cache.get::<Vec<u8>>(&cache_key)?
+        {
+            return Ok(cached_bytes);
+        }
+
+        // Fetch from registry
+        let blob_bytes = self
+            .client
             .fetch_blob(repository, &digest.to_string())
-            .await
+            .await?;
+
+        // Cache the blob with Config type (very long TTL for immutable content)
+        if let Some(cache) = &mut self.cache {
+            cache.set(&cache_key, &blob_bytes, crate::cache::CacheType::Config)?;
+        }
+
+        Ok(blob_bytes)
     }
 
     /// Checks if the registry is accessible and supports the OCI Distribution Specification.
