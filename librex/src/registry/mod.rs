@@ -12,20 +12,21 @@ use crate::digest::Digest;
 use crate::error::Result;
 use crate::oci::ManifestOrIndex;
 use crate::reference::Reference;
+use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 mod tests;
 
 /// Response from the catalog endpoint listing repositories.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]
 pub struct CatalogResponse {
     /// List of repository names.
     pub repositories: Vec<String>,
 }
 
 /// Response from the tags endpoint listing tags for a repository.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]
 pub struct TagsResponse {
     /// Repository name.
     pub name: String,

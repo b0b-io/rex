@@ -50,7 +50,6 @@ async fn test_get_image_inspect_manifest_not_found() {
 // The success case is tested in integration tests with real registries
 #[allow(dead_code)]
 #[tokio::test]
-#[ignore]
 async fn test_get_image_inspect_single_platform() {
     let mut server = mockito::Server::new_async().await;
     let registry_url = server.url();
@@ -64,30 +63,33 @@ async fn test_get_image_inspect_single_platform() {
         .create();
 
     // Create a minimal OCI manifest (matching oci-spec format)
-    let manifest_json = r#"{
+    let manifest_json = r#"{ 
     "schemaVersion": 2,
     "mediaType": "application/vnd.oci.image.manifest.v1+json",
     "config": {
         "mediaType": "application/vnd.oci.image.config.v1+json",
         "size": 1024,
-        "digest": "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        "digest": "sha256:05d6eacdcaf34accb9bfcc28ce285c4aee9844550f36890488468f9bcceebd76"
     },
     "layers": [
         {
             "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
             "size": 2048,
-            "digest": "sha256:layer1111111111111111111111111111111111111111111111111111111111111"
+            "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
         },
         {
             "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
             "size": 4096,
-            "digest": "sha256:layer2222222222222222222222222222222222222222222222222222222222222"
+            "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
         }
-    ]
+    ],
+    "annotations": {
+        "org.opencontainers.image.ref.name": "test/repo:latest"
+    }
 }"#;
 
     // Create a minimal OCI image config
-    let config_json = r#"{
+    let config_json = r#"{ 
         "architecture": "amd64",
         "os": "linux",
         "created": "2023-01-01T00:00:00Z",
@@ -100,8 +102,14 @@ async fn test_get_image_inspect_single_platform() {
                 "version": "1.0.0",
                 "maintainer": "test@example.com"
             },
-            "ExposedPorts": ["80/tcp", "443/tcp"],
-            "Volumes": ["/data", "/logs"]
+            "ExposedPorts": {
+                "80/tcp": {},
+                "443/tcp": {}
+            },
+            "Volumes": {
+                "/data": {},
+                "/logs": {}
+            }
         },
         "rootfs": {
             "type": "layers",
@@ -113,8 +121,7 @@ async fn test_get_image_inspect_single_platform() {
         "history": [
             {
                 "created": "2023-01-01T00:00:00Z",
-                "created_by": "/bin/sh -c #(nop) ADD file:123 in /",
-                "empty_layer": false
+                "created_by": "/bin/sh -c #(nop) ADD file:123 in /"
             },
             {
                 "created": "2023-01-01T00:01:00Z",
@@ -140,7 +147,7 @@ async fn test_get_image_inspect_single_platform() {
     let _config_mock = server
         .mock(
             "GET",
-            "/v2/test/repo/blobs/sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            "/v2/test/repo/blobs/sha256:05d6eacdcaf34accb9bfcc28ce285c4aee9844550f36890488468f9bcceebd76",
         )
         .with_status(200)
         .with_header("content-type", "application/vnd.oci.image.config.v1+json")
@@ -160,7 +167,7 @@ async fn test_get_image_inspect_single_platform() {
     assert_eq!(inspect.os, "linux");
     assert_eq!(
         inspect.config_digest,
-        "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        "sha256:05d6eacdcaf34accb9bfcc28ce285c4aee9844550f36890488468f9bcceebd76"
     );
 
     // Verify size calculation (sum of layer sizes)
@@ -207,12 +214,12 @@ async fn test_get_image_inspect_single_platform() {
     assert_eq!(inspect.layers.len(), 2);
     assert_eq!(
         inspect.layers[0].digest,
-        "sha256:layer1111111111111111111111111111111111111111111111111111111111111"
+        "sha256:1111111111111111111111111111111111111111111111111111111111111111"
     );
     assert_eq!(inspect.layers[0].size, 2048);
     assert_eq!(
         inspect.layers[1].digest,
-        "sha256:layer2222222222222222222222222222222222222222222222222222222222222"
+        "sha256:2222222222222222222222222222222222222222222222222222222222222222"
     );
     assert_eq!(inspect.layers[1].size, 4096);
 

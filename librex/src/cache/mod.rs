@@ -5,6 +5,7 @@
 
 use crate::config::CacheTtl;
 use crate::error::{Result, RexError};
+use bincode::{Decode, Encode, config::standard};
 use lru::LruCache;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::num::NonZeroUsize;
@@ -26,7 +27,7 @@ pub enum CacheType {
 
 /// A wrapper for cached data that includes metadata for expiration.
 /// This is the format that is serialized to disk.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Encode, Decode)]
 struct CacheEntry {
     /// The raw, serialized data.
     data: Vec<u8>,
@@ -86,21 +87,26 @@ impl Cache {
     }
 
     /// Retrieves an entry from the cache.
-    pub fn get<T: DeserializeOwned>(&mut self, key: &str) -> Result<Option<T>> {
+    pub fn get<T: DeserializeOwned + Encode + Decode<()>>(
+        &mut self,
+        key: &str,
+    ) -> Result<Option<T>> {
         // L1 Check
         if let Some(bytes) = self.memory.get(key) {
-            let entry: CacheEntry = bincode::deserialize(bytes).map_err(|e| {
-                RexError::validation_with_source("Failed to deserialize L1 cache entry", e)
-            })?;
+            let (entry, _): (CacheEntry, usize) = bincode::decode_from_slice(bytes, standard())
+                .map_err(|e| {
+                    RexError::validation_with_source("Failed to deserialize L1 cache entry", e)
+                })?;
 
             if SystemTime::now()
                 .duration_since(entry.cached_at)
                 .unwrap_or_default()
                 <= entry.ttl
             {
-                let data: T = bincode::deserialize(&entry.data).map_err(|e| {
-                    RexError::validation_with_source("Failed to deserialize L1 data", e)
-                })?;
+                let (data, _): (T, usize) = bincode::decode_from_slice(&entry.data, standard())
+                    .map_err(|e| {
+                        RexError::validation_with_source("Failed to deserialize L1 data", e)
+                    })?;
                 return Ok(Some(data));
             } else {
                 self.memory.pop(key);
@@ -121,9 +127,10 @@ impl Cache {
             )
         })?;
 
-        let entry: CacheEntry = bincode::deserialize(&bytes).map_err(|e| {
-            RexError::validation_with_source("Failed to deserialize L2 cache entry", e)
-        })?;
+        let (entry, _): (CacheEntry, usize) = bincode::decode_from_slice(&bytes, standard())
+            .map_err(|e| {
+                RexError::validation_with_source("Failed to deserialize L2 cache entry", e)
+            })?;
 
         if SystemTime::now()
             .duration_since(entry.cached_at)
@@ -137,15 +144,20 @@ impl Cache {
         // Hydrate L1 cache
         self.memory.put(key.to_string(), bytes);
 
-        let data: T = bincode::deserialize(&entry.data)
+        let (data, _): (T, usize) = bincode::decode_from_slice(&entry.data, standard())
             .map_err(|e| RexError::validation_with_source("Failed to deserialize L2 data", e))?;
         Ok(Some(data))
     }
 
     /// Adds or updates an entry in the cache.
-    pub fn set<T: Serialize>(&mut self, key: &str, data: &T, cache_type: CacheType) -> Result<()> {
+    pub fn set<T: Serialize + Encode + Decode<()>>(
+        &mut self,
+        key: &str,
+        data: &T,
+        cache_type: CacheType,
+    ) -> Result<()> {
         let ttl = self.get_ttl(cache_type);
-        let data_bytes = bincode::serialize(data)
+        let data_bytes = bincode::encode_to_vec(data, standard())
             .map_err(|e| RexError::validation_with_source("Failed to serialize cache data", e))?;
 
         let entry = CacheEntry {
@@ -154,7 +166,7 @@ impl Cache {
             ttl,
         };
 
-        let entry_bytes = bincode::serialize(&entry)
+        let entry_bytes = bincode::encode_to_vec(&entry, standard())
             .map_err(|e| RexError::validation_with_source("Failed to serialize cache entry", e))?;
 
         // L2 Write
@@ -198,18 +210,25 @@ impl Cache {
             }
 
             let path = entry.path();
-            if let Ok(bytes) = std::fs::read(path)
-                && let Ok(cached_entry) = bincode::deserialize::<CacheEntry>(&bytes)
-                && SystemTime::now()
-                    .duration_since(cached_entry.cached_at)
-                    .unwrap_or_default()
-                    > cached_entry.ttl
-            {
-                if let Ok(metadata) = std::fs::metadata(path) {
-                    stats.reclaimed_space += metadata.len();
-                }
-                if std::fs::remove_file(path).is_ok() {
-                    stats.removed_files += 1;
+            if let Ok(bytes) = std::fs::read(path) {
+                match bincode::decode_from_slice::<CacheEntry, _>(&bytes, standard()) {
+                    Ok((cached_entry, _)) => {
+                        if SystemTime::now()
+                            .duration_since(cached_entry.cached_at)
+                            .unwrap_or_default()
+                            > cached_entry.ttl
+                        {
+                            if let Ok(metadata) = std::fs::metadata(path) {
+                                stats.reclaimed_space += metadata.len();
+                            }
+                            if std::fs::remove_file(path).is_ok() {
+                                stats.removed_files += 1;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        // Ignore deserialization errors
+                    }
                 }
             }
         }
