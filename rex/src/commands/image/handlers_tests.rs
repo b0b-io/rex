@@ -4,22 +4,22 @@ use super::*;
 // The tests verify that the function correctly calls the registry, parses responses, and
 // handles both success and error cases.
 
-#[tokio::test]
-async fn test_get_image_inspect_invalid_reference() {
-    let server = mockito::Server::new_async().await;
+#[test]
+fn test_get_image_inspect_invalid_reference() {
+    let server = mockito::Server::new();
     let registry_url = server.url();
 
     // Call get_image_inspect with invalid reference
-    let result = get_image_inspect(&registry_url, "").await;
+    let result = get_image_inspect(&registry_url, "");
 
     assert!(result.is_err());
     let err_msg = result.unwrap_err();
     assert!(err_msg.contains("Invalid image reference"));
 }
 
-#[tokio::test]
-async fn test_get_image_inspect_manifest_not_found() {
-    let mut server = mockito::Server::new_async().await;
+#[test]
+fn test_get_image_inspect_manifest_not_found() {
+    let mut server = mockito::Server::new();
     let registry_url = server.url();
 
     // Mock version check
@@ -38,7 +38,7 @@ async fn test_get_image_inspect_manifest_not_found() {
         .create();
 
     // Call get_image_inspect
-    let result = get_image_inspect(&registry_url, "test/repo:nonexistent").await;
+    let result = get_image_inspect(&registry_url, "test/repo:nonexistent");
 
     assert!(result.is_err());
     let err_msg = result.unwrap_err();
@@ -49,9 +49,9 @@ async fn test_get_image_inspect_manifest_not_found() {
 // Currently commented out due to oci-spec validation being very strict about JSON format
 // The success case is tested in integration tests with real registries
 #[allow(dead_code)]
-#[tokio::test]
-async fn test_get_image_inspect_single_platform() {
-    let mut server = mockito::Server::new_async().await;
+#[test]
+fn test_get_image_inspect_single_platform() {
+    let mut server = mockito::Server::new();
     let registry_url = server.url();
 
     // Mock version check
@@ -155,7 +155,7 @@ async fn test_get_image_inspect_single_platform() {
         .create();
 
     // Call get_image_inspect
-    let result = get_image_inspect(&registry_url, "test/repo:latest").await;
+    let result = get_image_inspect(&registry_url, "test/repo:latest");
 
     assert!(result.is_ok(), "Expected Ok, got: {:?}", result.err());
     let inspect = result.unwrap();

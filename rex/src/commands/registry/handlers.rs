@@ -133,13 +133,9 @@ pub fn handle_registry_list(ctx: &crate::context::AppContext, format: OutputForm
 }
 
 /// Handle the registry check subcommand
-pub async fn handle_registry_check(
-    ctx: &crate::context::AppContext,
-    name: &str,
-    format: OutputFormat,
-) {
+pub fn handle_registry_check(ctx: &crate::context::AppContext, name: &str, format: OutputFormat) {
     let config_path = config::get_config_path();
-    let result = check_registry(ctx, &config_path, name).await;
+    let result = check_registry(ctx, &config_path, name);
 
     match crate::format::format_output(&result, format) {
         Ok(output) => println!("{}", output),
@@ -151,7 +147,7 @@ pub async fn handle_registry_check(
 }
 
 /// Handle the registry login subcommand
-pub async fn handle_registry_login(
+pub fn handle_registry_login(
     ctx: &crate::context::AppContext,
     name: &str,
     username: Option<&str>,
@@ -165,7 +161,7 @@ pub async fn handle_registry_login(
 
     let config_path = config::get_config_path();
 
-    match login_registry(&config_path, name, username, password).await {
+    match login_registry(&config_path, name, username, password) {
         Ok(_) => format::success(ctx, &format!("Stored credentials for '{}'", name)),
         Err(e) => {
             format::error(ctx, &e);
@@ -295,7 +291,7 @@ pub fn handle_cache_prune(
 }
 
 /// Handle the cache sync subcommand
-pub async fn handle_cache_sync(
+pub fn handle_cache_sync(
     ctx: &crate::context::AppContext,
     name: Option<&str>,
     manifests: bool,
@@ -310,7 +306,7 @@ pub async fn handle_cache_sync(
 
     let config_path = config::get_config_path();
 
-    match cache_sync(ctx, &config_path, name, manifests, all, force).await {
+    match cache_sync(ctx, &config_path, name, manifests, all, force) {
         Ok(stats) => {
             format::success(ctx, "Cache synced successfully:");
             println!("  {} catalog entries", stats.catalog_entries);

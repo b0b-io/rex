@@ -48,6 +48,61 @@ interaction modes:
 - Easy discovery (TUI shown in `--help`)
 - Natural workflow between modes
 
+## Implementation Guidelines
+
+### Concurrency Model
+
+**librex Foundation**: Rex is built on librex, which provides a synchronous/blocking API.
+
+**CLI Parallelism**: When CLI commands need to perform parallel operations (e.g., fetching
+multiple manifests), use `rayon` for data parallelism:
+
+```rust
+use rayon::prelude::*;
+
+// Example: Fetch manifests for multiple images in parallel
+let manifests: Vec<_> = repos
+    .par_iter()  // Parallel iterator
+    .map(|repo| {
+        let mut rex = Rex::connect(&registry_url).unwrap();
+        rex.get_manifest(&Reference::parse(&format!("{}:latest", repo)).unwrap())
+    })
+    .collect();
+```
+
+**TUI Background Operations**: TUI uses threads + channels for non-blocking I/O:
+
+```rust
+use std::sync::mpsc;
+use std::thread;
+
+// Spawn background fetch without blocking UI
+let tx = self.tx.clone();
+thread::spawn(move || {
+    let mut rex = Rex::connect(&registry_url).unwrap();
+    let result = rex.list_repositories();
+    tx.send(Message::RepositoriesLoaded(result)).unwrap();
+});
+
+// In UI loop: check for messages without blocking
+while let Ok(msg) = self.rx.try_recv() {
+    self.handle_message(msg);
+}
+```
+
+**Benefits**:
+- No async/await complexity
+- No tokio dependency in most of codebase
+- Simple, predictable control flow
+- Easy debugging and error handling
+- Smaller binary size
+
+**Dependencies**:
+- `rayon` - For CLI parallelism (data-parallel operations)
+- `crossterm` - For TUI terminal control
+- `ratatui` - For TUI rendering
+- NO `tokio` required
+
 ---
 
 ## Part 2: CLI Interface Design
@@ -2318,13 +2373,15 @@ rex tui --theme light
 
 **Framework**: ratatui (terminal UI library)
 **Event Handling**: crossterm (terminal event handling)
+**Concurrency**: threads + channels (no async/await)
 
 **Component Structure**:
 
 ```text
 rex/src/tui/
 ├── mod.rs              # TUI entry point and main loop
-├── app.rs              # Application state machine
+├── app.rs              # Application state machine + message handling
+├── worker.rs           # Background worker thread management
 ├── ui/                 # UI components
 │   ├── mod.rs
 │   ├── images.rs       # Images list view
@@ -2334,6 +2391,69 @@ rex/src/tui/
 │   └── help.rs         # Help panel
 ├── events.rs           # Event handling and keybindings
 └── theme.rs            # Color themes and styling
+```
+
+**Threading Model**:
+
+```text
+┌─────────────────────────────────────┐
+│     Main Thread (UI Loop)           │
+│  - Render UI (60 FPS)               │
+│  - Handle keyboard events           │
+│  - Process messages from workers    │
+│  - Update application state         │
+└─────────────────────────────────────┘
+              ↕ mpsc::channel
+┌─────────────────────────────────────┐
+│   Worker Threads (on-demand)        │
+│  - Fetch repositories               │
+│  - Fetch tags                       │
+│  - Fetch manifests                  │
+│  - Background cache refresh         │
+└─────────────────────────────────────┘
+```
+
+**Implementation Pattern**:
+
+```rust
+// Main loop - synchronous, no async
+pub fn run() -> Result<()> {
+    let mut terminal = setup_terminal()?;
+    let mut app = App::new();
+
+    loop {
+        // Render UI
+        terminal.draw(|f| render(f, &app))?;
+
+        // Poll for events with timeout
+        if event::poll(Duration::from_millis(100))? {
+            app.handle_event(event::read()?)?;
+        }
+
+        // Check for worker messages (non-blocking)
+        app.process_messages();
+
+        if app.should_quit { break; }
+    }
+
+    cleanup(terminal)
+}
+
+// Worker spawning
+impl App {
+    fn spawn_fetch(&self, operation: Operation) {
+        let tx = self.tx.clone();
+        thread::spawn(move || {
+            // Blocking librex call in background thread
+            let mut rex = Rex::connect(&url).unwrap();
+            let result = match operation {
+                Operation::ListRepos => rex.list_repositories(),
+                // ... other operations
+            };
+            tx.send(Message::Result(result)).unwrap();
+        });
+    }
+}
 ```
 
 ### 3.3 Main Views
@@ -2453,24 +2573,39 @@ Shows:
 
 ### 3.8 Performance Considerations
 
-**Async Loading**:
+**Non-blocking I/O** (via threads):
 
-- TUI doesn't block on network requests
-- Shows loading spinner while fetching
-- Uses cache aggressively
-- Background refresh
+- TUI main thread never blocks on network requests
+- Worker threads handle all I/O operations
+- Main thread shows loading spinner while waiting for messages
+- Uses cache aggressively for instant display
+- Background refresh via worker threads
+
+**Message Flow**:
+
+```rust
+// User action triggers background fetch
+User presses Enter on image
+  → App spawns worker thread
+  → Main thread shows spinner
+  → Worker calls librex (blocking in worker thread)
+  → Worker sends result via channel
+  → Main thread receives message (try_recv)
+  → UI updates with result
+```
 
 **Pagination**:
 
 - Large lists paginated automatically
-- Load more as user scrolls
+- Load more as user scrolls (spawn worker for next page)
 - Prevents UI lag with thousands of items
 
 **Cache Strategy**:
 
-- Serve from cache immediately
-- Trigger background refresh
+- Serve from cache immediately (synchronous read)
+- Trigger background refresh in worker thread
 - Update UI when fresh data arrives (eventual consistency)
+- No async overhead - just threads + channels
 
 ---
 

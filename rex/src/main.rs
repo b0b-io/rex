@@ -264,8 +264,7 @@ enum CacheCommands {
     },
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let cli = Cli::parse();
 
     // Build context with precedence: defaults > config file > env vars > CLI flags
@@ -311,7 +310,7 @@ async fn main() {
             }
             RegistryCommands::Check { name, format } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::registry::handlers::handle_registry_check(&ctx, &name, fmt).await;
+                commands::registry::handlers::handle_registry_check(&ctx, &name, fmt);
             }
             RegistryCommands::Login {
                 name,
@@ -323,8 +322,7 @@ async fn main() {
                     &name,
                     username.as_deref(),
                     password.as_deref(),
-                )
-                .await;
+                );
             }
             RegistryCommands::Logout { name } => {
                 commands::registry::handlers::handle_registry_logout(&ctx, &name);
@@ -362,8 +360,7 @@ async fn main() {
                         manifests,
                         all,
                         force,
-                    )
-                    .await;
+                    );
                 }
             },
         },
@@ -381,8 +378,7 @@ async fn main() {
                     quiet,
                     filter.as_deref(),
                     limit,
-                )
-                .await;
+                );
             }
             ImageCommands::Tags {
                 name,
@@ -399,13 +395,11 @@ async fn main() {
                     quiet,
                     filter.as_deref(),
                     limit,
-                )
-                .await;
+                );
             }
             ImageCommands::Show { reference, format } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::image::handlers::handle_image_details(&ctx, reference.as_str(), fmt)
-                    .await;
+                commands::image::handlers::handle_image_details(&ctx, reference.as_str(), fmt);
             }
             ImageCommands::Inspect {
                 reference,
@@ -422,8 +416,7 @@ async fn main() {
                     platform.as_deref(),
                     raw_manifest,
                     raw_config,
-                )
-                .await;
+                );
             }
         },
         Commands::Search {
@@ -432,7 +425,7 @@ async fn main() {
             limit,
         } => {
             let fmt = format::OutputFormat::from(format.as_str());
-            commands::search::handlers::handle_search(&ctx, query.as_str(), fmt, limit).await;
+            commands::search::handlers::handle_search(&ctx, query.as_str(), fmt, limit);
         }
         Commands::Completion { shell } => {
             let mut cmd = Cli::command();

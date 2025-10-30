@@ -507,8 +507,8 @@ fn test_show_registry_empty_config() {
 }
 
 // Tests for registry check command
-#[tokio::test]
-async fn test_check_registry_nonexistent() {
+#[test]
+fn test_check_registry_nonexistent() {
     let temp_dir = tempfile::tempdir().unwrap();
     let config_path = temp_dir.path().join("config.toml");
 
@@ -519,20 +519,20 @@ async fn test_check_registry_nonexistent() {
         crate::format::ColorChoice::Auto,
         crate::context::VerbosityLevel::Normal,
     );
-    let result = check_registry(&ctx, &config_path, "nonexistent").await;
+    let result = check_registry(&ctx, &config_path, "nonexistent");
     assert!(!result.online);
     assert!(result.error.unwrap().contains("not found in configuration"));
 }
 
-#[tokio::test]
-async fn test_check_registry_invalid_config() {
+#[test]
+fn test_check_registry_invalid_config() {
     let config_path = std::path::PathBuf::from("/tmp/nonexistent_check_config.toml");
 
     let ctx = crate::context::AppContext::build(
         crate::format::ColorChoice::Auto,
         crate::context::VerbosityLevel::Normal,
     );
-    let result = check_registry(&ctx, &config_path, "test").await;
+    let result = check_registry(&ctx, &config_path, "test");
     assert!(!result.online);
     assert!(result.error.unwrap().contains("Configuration error"));
 }

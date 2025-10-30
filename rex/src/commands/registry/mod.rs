@@ -332,7 +332,7 @@ pub(crate) fn list_registries(config_path: &PathBuf) -> Result<Vec<RegistryDispl
 }
 
 /// Check registry connectivity and status
-pub(crate) async fn check_registry(
+pub(crate) fn check_registry(
     ctx: &crate::context::AppContext,
     config_path: &PathBuf,
     name: &str,
@@ -424,7 +424,7 @@ pub(crate) async fn check_registry(
         }
     };
 
-    match client.check_version().await {
+    match client.check_version() {
         Ok(version) => RegistryCheckResult {
             name: name.to_string(),
             url: registry.url.clone(),
@@ -505,7 +505,7 @@ fn prompt_password(provided_password: Option<&str>) -> Result<String, String> {
 }
 
 /// Login to a registry
-pub(crate) async fn login_registry(
+pub(crate) fn login_registry(
     config_path: &PathBuf,
     name: &str,
     username: Option<&str>,
@@ -539,7 +539,7 @@ pub(crate) async fn login_registry(
     let client = librex::client::Client::new(&registry.url, Some(credentials.clone()))
         .map_err(|e| format!("Invalid registry URL: {}", e))?;
 
-    client.check_version().await.map_err(|e| {
+    client.check_version().map_err(|e| {
         let error_str = format!("{}", e);
         if error_str.contains("Authentication") || error_str.contains("401") {
             "Authentication failed. Please check your username and password.".to_string()
@@ -833,7 +833,7 @@ pub fn cache_prune(
 }
 
 /// Sync cache by fetching and caching registry metadata
-pub async fn cache_sync(
+pub fn cache_sync(
     ctx: &crate::context::AppContext,
     config_path: &PathBuf,
     name: Option<&str>,
@@ -851,7 +851,7 @@ pub async fn cache_sync(
                 "Syncing cache for '{}' ({})...",
                 registry.name, registry.url
             );
-            let stats = sync_single_registry(ctx, &registry.url, manifests).await?;
+            let stats = sync_single_registry(ctx, &registry.url, manifests)?;
             total_stats.catalog_entries += stats.catalog_entries;
             total_stats.tag_entries += stats.tag_entries;
             total_stats.manifest_entries += stats.manifest_entries;
@@ -887,10 +887,10 @@ pub async fn cache_sync(
         registry.url
     );
 
-    sync_single_registry(ctx, &registry.url, manifests).await
+    sync_single_registry(ctx, &registry.url, manifests)
 }
 
-async fn sync_single_registry(
+fn sync_single_registry(
     ctx: &crate::context::AppContext,
     registry_url: &str,
     manifests: bool,
@@ -921,7 +921,6 @@ async fn sync_single_registry(
 
     let mut rex = builder
         .build()
-        .await
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
     let mut stats = CacheSyncStats::default();
@@ -930,7 +929,7 @@ async fn sync_single_registry(
     // Fetch catalog with spinner
     let spinner = formatter.spinner("Fetching catalog...");
 
-    let repos_res = rex.list_repositories().await;
+    let repos_res = rex.list_repositories();
     let repos = match repos_res {
         Ok(repos) => {
             formatter.finish_progress(
@@ -953,7 +952,7 @@ async fn sync_single_registry(
     let mut errors = Vec::new();
 
     for repo in &repos {
-        match rex.list_tags(repo).await {
+        match rex.list_tags(repo) {
             Ok(tags) => {
                 total_tags += tags.len();
 
@@ -964,7 +963,7 @@ async fn sync_single_registry(
                     for tag in &tags {
                         let reference = format!("{}:{}", repo, tag);
                         // Fetch manifest
-                        if let Ok(manifest_or_index) = rex.get_manifest(&reference).await {
+                        if let Ok(manifest_or_index) = rex.get_manifest(&reference) {
                             stats.manifest_entries += 1;
 
                             // Fetch config blob if this is a manifest (not an index)
@@ -973,7 +972,7 @@ async fn sync_single_registry(
                                 if let Ok(config_digest) =
                                     librex::digest::Digest::from_str(&config_digest_str)
                                 {
-                                    let _ = rex.get_blob(repo, &config_digest).await; // Cache the config blob
+                                    let _ = rex.get_blob(repo, &config_digest); // Cache the config blob
                                     stats.config_entries += 1;
                                 }
                             }

@@ -7,16 +7,15 @@
 
 use librex::Rex;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Rex Library - Basic Usage Example\n");
 
     // Connect to a local registry
-    let mut rex = Rex::connect("http://localhost:5000").await?;
+    let mut rex = Rex::connect("http://localhost:5000")?;
     println!("✓ Connected to registry: {}\n", rex.registry_url());
 
     // Check if registry is accessible
-    match rex.check().await {
+    match rex.check() {
         Ok(_) => println!("✓ Registry is accessible and supports OCI Distribution Spec\n"),
         Err(e) => {
             eprintln!("✗ Failed to connect: {}", e);
@@ -30,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // List all repositories
     println!("Fetching repositories...");
-    match rex.list_repositories().await {
+    match rex.list_repositories() {
         Ok(repos) => {
             println!("✓ Found {} repositories:\n", repos.len());
             for repo in repos.iter().take(10) {
@@ -44,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // If we have repositories, list tags for the first one
             if let Some(first_repo) = repos.first() {
                 println!("Fetching tags for '{}'...", first_repo);
-                match rex.list_tags(first_repo).await {
+                match rex.list_tags(first_repo) {
                     Ok(tags) => {
                         println!("✓ Found {} tags:\n", tags.len());
                         for tag in tags.iter().take(5) {
@@ -59,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         if let Some(first_tag) = tags.first() {
                             let image_ref = format!("{}:{}", first_repo, first_tag);
                             println!("Checking platforms for '{}'...", image_ref);
-                            match rex.list_platforms(&image_ref).await {
+                            match rex.list_platforms(&image_ref) {
                                 Ok(platforms) if !platforms.is_empty() => {
                                     println!(
                                         "✓ Multi-platform image with {} platforms:\n",
@@ -83,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // Search for repositories
                 println!("Searching for repositories matching 'alp'...");
-                match rex.search_repositories("alp").await {
+                match rex.search_repositories("alp") {
                     Ok(results) => {
                         if results.is_empty() {
                             println!("  No matches found\n");

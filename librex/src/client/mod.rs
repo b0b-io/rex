@@ -6,7 +6,8 @@
 
 use crate::digest::Digest;
 use crate::error::{Result, RexError};
-use reqwest::{Client as ReqwestClient, Response, StatusCode};
+use reqwest::StatusCode;
+use reqwest::blocking::{Client as ReqwestClient, Response};
 use serde::Deserialize;
 use sha2::{Digest as Sha2Digest, Sha256};
 use std::str::FromStr;
@@ -245,9 +246,9 @@ impl Client {
     /// ```no_run
     /// use librex::client::Client;
     ///
-    /// # async fn example() -> librex::error::Result<()> {
+    /// # fn example() -> librex::error::Result<()> {
     /// let client = Client::new("http://localhost:5000", None)?;
-    /// let version = client.check_version().await?;
+    /// let version = client.check_version()?;
     /// if let Some(api_version) = version.api_version {
     ///     println!("Registry API version: {}", api_version);
     /// }
@@ -266,7 +267,7 @@ impl Client {
     /// - The registry is unreachable
     /// - The registry does not support the OCI Distribution Specification
     /// - Authentication is required but not provided
-    pub async fn check_version(&self) -> Result<RegistryVersion> {
+    pub fn check_version(&self) -> Result<RegistryVersion> {
         let url = format!("{}/v2/", self.registry_url);
 
         let mut request = self.http_client.get(&url);
@@ -280,7 +281,6 @@ impl Client {
 
         let response = request
             .send()
-            .await
             .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;
 
         // Extract version information from headers before consuming response
@@ -290,7 +290,7 @@ impl Client {
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
 
-        Self::check_response_status(response).await?;
+        Self::check_response_status(response)?;
 
         Ok(RegistryVersion { api_version })
     }
@@ -306,9 +306,9 @@ impl Client {
     /// ```no_run
     /// use librex::client::Client;
     ///
-    /// # async fn example() -> librex::error::Result<()> {
+    /// # fn example() -> librex::error::Result<()> {
     /// let client = Client::new("http://localhost:5000", None)?;
-    /// let repositories = client.fetch_catalog().await?;
+    /// let repositories = client.fetch_catalog()?;
     /// for repo in repositories {
     ///     println!("{}", repo);
     /// }
@@ -322,8 +322,8 @@ impl Client {
     /// - The registry is unreachable
     /// - Authentication is required but not provided
     /// - The response cannot be parsed as valid JSON
-    pub async fn fetch_catalog(&self) -> Result<Vec<String>> {
-        self.fetch_catalog_paginated(None).await
+    pub fn fetch_catalog(&self) -> Result<Vec<String>> {
+        self.fetch_catalog_paginated(None)
     }
 
     /// Fetches the catalog with optional pagination limit.
@@ -341,18 +341,18 @@ impl Client {
     /// ```no_run
     /// use librex::client::Client;
     ///
-    /// # async fn example() -> librex::error::Result<()> {
+    /// # fn example() -> librex::error::Result<()> {
     /// let client = Client::new("http://localhost:5000", None)?;
     ///
     /// // Fetch all repositories
-    /// let all_repos = client.fetch_catalog_paginated(None).await?;
+    /// let all_repos = client.fetch_catalog_paginated(None)?;
     ///
     /// // Fetch with pagination limit (useful for large registries)
-    /// let repos_page = client.fetch_catalog_paginated(Some(100)).await?;
+    /// let repos_page = client.fetch_catalog_paginated(Some(100))?;
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn fetch_catalog_paginated(&self, limit: Option<usize>) -> Result<Vec<String>> {
+    pub fn fetch_catalog_paginated(&self, limit: Option<usize>) -> Result<Vec<String>> {
         let mut all_repositories = Vec::new();
         let mut url = format!("{}/v2/_catalog", self.registry_url);
 
@@ -373,15 +373,14 @@ impl Client {
 
             let response = request
                 .send()
-                .await
                 .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;
 
             // Extract Link header for pagination before consuming response
             let next_path = Self::extract_next_link(response.headers());
 
-            let response = Self::check_response_status(response).await?;
+            let response = Self::check_response_status(response)?;
 
-            let catalog: CatalogResponse = response.json().await.map_err(|e| {
+            let catalog: CatalogResponse = response.json().map_err(|e| {
                 RexError::validation_with_source("Failed to parse catalog response", e)
             })?;
 
@@ -414,9 +413,9 @@ impl Client {
     /// ```no_run
     /// use librex::client::Client;
     ///
-    /// # async fn example() -> librex::error::Result<()> {
+    /// # fn example() -> librex::error::Result<()> {
     /// let client = Client::new("http://localhost:5000", None)?;
-    /// let tags = client.fetch_tags("alpine").await?;
+    /// let tags = client.fetch_tags("alpine")?;
     /// for tag in tags {
     ///     println!("{}", tag);
     /// }
@@ -431,8 +430,8 @@ impl Client {
     /// - The repository does not exist
     /// - Authentication is required but not provided
     /// - The response cannot be parsed as valid JSON
-    pub async fn fetch_tags(&self, repository: &str) -> Result<Vec<String>> {
-        self.fetch_tags_paginated(repository, None).await
+    pub fn fetch_tags(&self, repository: &str) -> Result<Vec<String>> {
+        self.fetch_tags_paginated(repository, None)
     }
 
     /// Fetches the list of tags with optional pagination limit.
@@ -451,18 +450,18 @@ impl Client {
     /// ```no_run
     /// use librex::client::Client;
     ///
-    /// # async fn example() -> librex::error::Result<()> {
+    /// # fn example() -> librex::error::Result<()> {
     /// let client = Client::new("http://localhost:5000", None)?;
     ///
     /// // Fetch all tags
-    /// let all_tags = client.fetch_tags_paginated("alpine", None).await?;
+    /// let all_tags = client.fetch_tags_paginated("alpine", None)?;
     ///
     /// // Fetch with pagination limit
-    /// let tags_page = client.fetch_tags_paginated("alpine", Some(100)).await?;
+    /// let tags_page = client.fetch_tags_paginated("alpine", Some(100))?;
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn fetch_tags_paginated(
+    pub fn fetch_tags_paginated(
         &self,
         repository: &str,
         limit: Option<usize>,
@@ -487,15 +486,14 @@ impl Client {
 
             let response = request
                 .send()
-                .await
                 .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;
 
             // Extract Link header for pagination before consuming response
             let next_path = Self::extract_next_link(response.headers());
 
-            let response = Self::check_response_status(response).await?;
+            let response = Self::check_response_status(response)?;
 
-            let tags_response: TagsResponse = response.json().await.map_err(|e| {
+            let tags_response: TagsResponse = response.json().map_err(|e| {
                 RexError::validation_with_source("Failed to parse tags response", e)
             })?;
 
@@ -536,17 +534,17 @@ impl Client {
     /// ```no_run
     /// use librex::client::Client;
     ///
-    /// # async fn example() -> librex::error::Result<()> {
+    /// # fn example() -> librex::error::Result<()> {
     /// let client = Client::new("http://localhost:5000", None)?;
     ///
     /// // Fetch by tag
-    /// let (manifest_bytes, digest) = client.fetch_manifest("alpine", "latest").await?;
+    /// let (manifest_bytes, digest) = client.fetch_manifest("alpine", "latest")?;
     ///
     /// // Fetch by digest
     /// let (manifest_bytes, digest) = client.fetch_manifest(
     ///     "alpine",
     ///     "sha256:c5b1261d6d3e43071626931fc004f70149baeba2c8ec672bd4f27761f8e1ad6b"
-    /// ).await?;
+    /// )?;
     /// # Ok(())
     /// # }
     /// ```
@@ -564,11 +562,7 @@ impl Client {
     /// - The repository or reference does not exist
     /// - Authentication is required but not provided
     /// - The Docker-Content-Digest header is missing
-    pub async fn fetch_manifest(
-        &self,
-        repository: &str,
-        reference: &str,
-    ) -> Result<(Vec<u8>, String)> {
+    pub fn fetch_manifest(&self, repository: &str, reference: &str) -> Result<(Vec<u8>, String)> {
         let url = format!(
             "{}/v2/{}/manifests/{}",
             self.registry_url, repository, reference
@@ -595,7 +589,6 @@ impl Client {
 
         let response = request
             .send()
-            .await
             .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;
 
         // Extract Docker-Content-Digest header before consuming response
@@ -606,12 +599,11 @@ impl Client {
             .map(|s| s.to_string())
             .ok_or_else(|| RexError::validation("Response missing Docker-Content-Digest header"))?;
 
-        let response = Self::check_response_status(response).await?;
+        let response = Self::check_response_status(response)?;
 
         // Get raw bytes for the manifest
         let manifest_bytes = response
             .bytes()
-            .await
             .map_err(|e| RexError::network_with_source("Failed to read manifest response", e))?;
 
         Ok((manifest_bytes.to_vec(), digest))
@@ -634,14 +626,14 @@ impl Client {
     /// use librex::client::Client;
     /// use std::str::FromStr;
     ///
-    /// # async fn example() -> librex::error::Result<()> {
+    /// # fn example() -> librex::error::Result<()> {
     /// let client = Client::new("http://localhost:5000", None)?;
     ///
     /// // Fetch a blob by digest
     /// let blob_data = client.fetch_blob(
     ///     "alpine",
     ///     "sha256:4abcf20661432fb2d719b4568d94db3b6cf9b44bf2a3e1c2c6d0c89fd9e6e0b2"
-    /// ).await?;
+    /// )?;
     /// # Ok(())
     /// # }
     /// ```
@@ -659,7 +651,7 @@ impl Client {
     /// - Authentication is required but not provided
     /// - The downloaded content does not match the expected digest
     /// - The digest format is invalid
-    pub async fn fetch_blob(&self, repository: &str, digest: &str) -> Result<Vec<u8>> {
+    pub fn fetch_blob(&self, repository: &str, digest: &str) -> Result<Vec<u8>> {
         // Parse and validate the digest format
         let expected_digest = Digest::from_str(digest)?;
 
@@ -676,15 +668,13 @@ impl Client {
 
         let response = request
             .send()
-            .await
             .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;
 
-        let response = Self::check_response_status(response).await?;
+        let response = Self::check_response_status(response)?;
 
         // Download the blob content
         let blob_bytes = response
             .bytes()
-            .await
             .map_err(|e| RexError::network_with_source("Failed to read blob response", e))?;
 
         // Verify the digest matches what we downloaded
@@ -766,7 +756,7 @@ impl Client {
     }
 
     /// Checks the HTTP response status and translates errors to RexError.
-    async fn check_response_status(response: Response) -> Result<Response> {
+    fn check_response_status(response: Response) -> Result<Response> {
         let status = response.status();
 
         if status.is_success() {
@@ -777,7 +767,6 @@ impl Client {
         let url = response.url().to_string();
         let error_body = response
             .text()
-            .await
             .unwrap_or_else(|_| String::from("(unable to read response body)"));
 
         match status {

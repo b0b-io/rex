@@ -3,7 +3,7 @@ use crate::context::VerbosityLevel;
 use crate::format::{self, OutputFormat};
 
 /// Handle the search command
-pub async fn handle_search(
+pub fn handle_search(
     ctx: &crate::context::AppContext,
     query: &str,
     format: OutputFormat,
@@ -22,7 +22,7 @@ pub async fn handle_search(
         );
     }
 
-    match search(ctx, query, limit).await {
+    match search(ctx, query, limit) {
         Ok(results) => match crate::format::format_output(&results, format) {
             Ok(output) => print!("{}", output),
             Err(e) => {

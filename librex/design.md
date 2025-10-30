@@ -37,6 +37,30 @@ registry operations, authentication, caching, and data management.
 └─────────────────────────────────────────┘
 ```
 
+## Implementation Guidelines
+
+### Concurrency Model
+
+**Decision**: librex uses a **synchronous/blocking architecture** with no async/await.
+
+**Rationale**:
+- HTTP operations are sequential request-response patterns (no concurrent I/O within the library)
+- Simpler API surface for consumers
+- No async runtime overhead (smaller binary, faster compilation)
+- Easier testing and debugging
+- Consumers can choose their own concurrency strategy
+
+**HTTP Client**: Use `reqwest::blocking` for all network operations.
+
+**Parallelism**: When consumers need parallel operations (e.g., fetching multiple manifests),
+they can spawn multiple instances of librex in separate threads/tasks.
+
+**Benefits**:
+- Library stays simple and predictable
+- CLI can use `rayon` for data parallelism
+- TUI can use threads + channels for background operations
+- No forced dependency on tokio or any async runtime
+
 ## Part 1: Core Engine Design (librex)
 
 The core engine is implemented as a Rust library crate that provides all
@@ -1114,15 +1138,15 @@ Rex uses structured logging throughout the application for debugging, diagnostic
 
 #### Logging Framework
 
-**Library**: Use `tracing` crate (Rust standard for async-aware structured logging)
+**Library**: Use `log` crate (Rust standard logging facade)
 
-**Why `tracing` over `log`**:
+**Why `log`**:
 
-- Structured logging with fields (key-value pairs)
-- Async-aware (important for async HTTP operations)
-- Span-based tracing for request context
-- Better performance and flexibility
-- Rich ecosystem (tracing-subscriber, tracing-appender)
+- Simple, lightweight logging facade
+- Works well with synchronous/blocking code
+- No async runtime dependencies
+- Consumers can choose their own logging implementation
+- De facto standard for Rust libraries
 
 #### Log Levels
 
@@ -1239,23 +1263,19 @@ tracing::info!("Fetched tags for {} from {} in {}ms", repo, url, duration);
 - `attempt` - Retry attempt number
 - `cache_key` - Cache key
 
-#### Spans for Context
+#### Structured Context
 
-Use spans to add context to groups of operations:
+Add context to log messages with structured fields:
 
 ```rust
-// Create span for entire registry operation
-let span = tracing::info_span!("fetch_manifest",
-    registry = %registry,
-    repository = %repo,
-    reference = %tag
+log::info!("Fetching manifest";
+    "registry" => registry,
+    "repository" => repo,
+    "reference" => tag
 );
-
-let _enter = span.enter();
-// All logs within this scope automatically include span fields
 ```
 
-**Span Usage**:
+**Context Usage**:
 
 - HTTP requests (track request lifecycle)
 - Registry operations (catalog, tags, manifest fetch)
@@ -1363,13 +1383,8 @@ if let Err(e) = fetch_manifest() {
 **Minimal Overhead**:
 
 - Logs at disabled levels have near-zero cost
-- Structured fields use lazy evaluation
-- Spans use RAII for automatic cleanup
-
-**Async-Aware**:
-
-- Spans automatically propagate through async boundaries
-- Works correctly with tokio runtime
+- Lazy evaluation of log arguments
+- No runtime overhead for disabled log levels
 
 **Sampling** (future):
 

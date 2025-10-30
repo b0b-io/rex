@@ -75,7 +75,7 @@ impl Formattable for SearchResults {
 }
 
 /// Perform unified search across images and tags
-pub async fn search(
+pub fn search(
     ctx: &crate::context::AppContext,
     query: &str,
     limit: Option<usize>,
@@ -126,14 +126,13 @@ pub async fn search(
 
     let mut rex = builder
         .build()
-        .await
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
     let formatter = crate::format::create_formatter(ctx);
 
     // Search images (repositories)
     let spinner = formatter.spinner("Searching repositories...");
-    let image_results_res = rex.search_repositories(query).await;
+    let image_results_res = rex.search_repositories(query);
     let mut image_results = match image_results_res {
         Ok(results) => {
             formatter.finish_progress(spinner, &format!("Found {} matching images", results.len()));
@@ -152,7 +151,7 @@ pub async fn search(
 
     // Search tags across all images
     let spinner = formatter.spinner("Searching tags...");
-    let tag_results_res = rex.search_images(query).await;
+    let tag_results_res = rex.search_images(query);
     let mut tag_results = match tag_results_res {
         Ok(results) => {
             formatter.finish_progress(spinner, &format!("Found {} matching tags", results.len()));
