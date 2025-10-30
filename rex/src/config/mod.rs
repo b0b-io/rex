@@ -17,6 +17,9 @@ pub struct Config {
     /// Cache directory path
     #[serde(default = "default_cache_dir")]
     pub cache_dir: String,
+    /// Maximum number of concurrent requests for parallel operations
+    #[serde(default = "default_concurrency")]
+    pub concurrency: usize,
 }
 
 impl Default for Config {
@@ -25,12 +28,17 @@ impl Default for Config {
             style: StyleConfig::default(),
             registries: RegistriesConfig::default(),
             cache_dir: default_cache_dir(),
+            concurrency: default_concurrency(),
         }
     }
 }
 
 fn default_cache_dir() -> String {
     get_default_cache_dir().to_string_lossy().to_string()
+}
+
+fn default_concurrency() -> usize {
+    8
 }
 
 /// Style configuration section
@@ -150,6 +158,7 @@ pub fn get_config_value(config_path: &PathBuf, key: &str) -> Result<String, Stri
         }),
         ["style", "color"] => Ok(config.style.color.to_string()),
         ["cache_dir"] => Ok(config.cache_dir.clone()),
+        ["concurrency"] => Ok(config.concurrency.to_string()),
         _ => Err(format!("Unknown config key: {}", key)),
     }
 }
@@ -174,6 +183,14 @@ pub fn set_config_value(config_path: &PathBuf, key: &str, value: &str) -> Result
         }
         ["cache_dir"] => {
             config.cache_dir = value.to_string();
+        }
+        ["concurrency"] => {
+            config.concurrency = value.parse::<usize>().map_err(|_| {
+                format!(
+                    "Invalid concurrency value '{}': must be a positive integer",
+                    value
+                )
+            })?;
         }
         _ => return Err(format!("Unknown config key: {}", key)),
     }

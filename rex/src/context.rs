@@ -68,6 +68,11 @@ impl AppContext {
         if let Ok(cache_dir) = env::var("REX_CACHE_DIR") {
             config.cache_dir = cache_dir;
         }
+        if let Ok(concurrency) = env::var("REX_CONCURRENCY")
+            && let Ok(value) = concurrency.parse::<usize>()
+        {
+            config.concurrency = value;
+        }
 
         // 4. Apply CLI flag overrides (highest priority)
         // Only override if not Auto (which is the default from clap)
