@@ -8,19 +8,18 @@
 //! ```no_run
 //! use librex::Rex;
 //!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Connect to a registry
-//!     let mut rex = Rex::connect("http://localhost:5000").await?;
+//!     let mut rex = Rex::connect("http://localhost:5000")?;
 //!
 //!     // List all repositories
-//!     let repos = rex.list_repositories().await?;
+//!     let repos = rex.list_repositories()?;
 //!     for repo in repos {
 //!         println!("{}", repo);
 //!     }
 //!
 //!     // Search for repositories
-//!     let results = rex.search_repositories("alpine").await?;
+//!     let results = rex.search_repositories("alpine")?;
 //!     for result in results {
 //!         println!("{}", result.value);
 //!     }

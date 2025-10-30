@@ -84,19 +84,19 @@ impl Registry {
     /// ```no_run
     /// # use librex::client::Client;
     /// # use librex::registry::Registry;
-    /// # #[tokio::main]
-    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// #
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
     /// let mut registry = Registry::new(client, None, None);
     ///
-    /// let repos = registry.list_repositories().await?;
+    /// let repos = registry.list_repositories()?;
     /// for repo in repos {
     ///     println!("{}", repo);
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn list_repositories(&mut self) -> Result<Vec<String>> {
+    pub fn list_repositories(&mut self) -> Result<Vec<String>> {
         let cache_key = "catalog";
 
         // Try cache first
@@ -107,7 +107,7 @@ impl Registry {
         }
 
         // Fetch from registry - client returns Vec<String> directly
-        let repositories = self.client.fetch_catalog().await?;
+        let repositories = self.client.fetch_catalog()?;
 
         // Cache the result
         if let Some(cache) = &mut self.cache {
@@ -135,19 +135,19 @@ impl Registry {
     /// ```no_run
     /// # use librex::client::Client;
     /// # use librex::registry::Registry;
-    /// # #[tokio::main]
-    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// #
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
     /// let mut registry = Registry::new(client, None, None);
     ///
-    /// let tags = registry.list_tags("alpine").await?;
+    /// let tags = registry.list_tags("alpine")?;
     /// for tag in tags {
     ///     println!("{}", tag);
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn list_tags(&mut self, repository: &str) -> Result<Vec<String>> {
+    pub fn list_tags(&mut self, repository: &str) -> Result<Vec<String>> {
         let cache_key = format!("{}/_tags", repository);
 
         // Try cache first
@@ -158,7 +158,7 @@ impl Registry {
         }
 
         // Fetch from registry - client returns Vec<String> directly
-        let tags = self.client.fetch_tags(repository).await?;
+        let tags = self.client.fetch_tags(repository)?;
 
         // Cache the result
         if let Some(cache) = &mut self.cache {
@@ -194,13 +194,13 @@ impl Registry {
     /// # use librex::reference::Reference;
     /// # use librex::registry::Registry;
     /// # use std::str::FromStr;
-    /// # #[tokio::main]
-    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// #
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
     /// let mut registry = Registry::new(client, None, None);
     /// let reference = Reference::from_str("alpine:latest")?;
     ///
-    /// let manifest_or_index = registry.get_manifest(&reference).await?;
+    /// let manifest_or_index = registry.get_manifest(&reference)?;
     /// match manifest_or_index {
     ///     librex::ManifestOrIndex::Manifest(manifest) => {
     ///         println!("Single-platform image with {} layers", manifest.layers().len());
@@ -212,7 +212,7 @@ impl Registry {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn get_manifest(&mut self, reference: &Reference) -> Result<ManifestOrIndex> {
+    pub fn get_manifest(&mut self, reference: &Reference) -> Result<ManifestOrIndex> {
         // For digest references, we can cache by digest
         let cache_key = if let Some(digest) = reference.digest() {
             format!("{}/manifests/{}", reference.repository(), digest)
@@ -244,8 +244,7 @@ impl Registry {
 
         let (manifest_bytes, _digest) = self
             .client
-            .fetch_manifest(reference.repository(), reference_str)
-            .await?;
+            .fetch_manifest(reference.repository(), reference_str)?;
 
         // Parse the manifest or index
         let manifest_or_index = ManifestOrIndex::from_bytes(&manifest_bytes)?;
@@ -280,18 +279,18 @@ impl Registry {
     /// # use librex::digest::Digest;
     /// # use librex::registry::Registry;
     /// # use std::str::FromStr;
-    /// # #[tokio::main]
-    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// #
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
     /// let mut registry = Registry::new(client, None, None);
     /// let digest = Digest::from_str("sha256:abc123...")?;
     ///
-    /// let blob = registry.get_blob("alpine", &digest).await?;
+    /// let blob = registry.get_blob("alpine", &digest)?;
     /// println!("Blob size: {} bytes", blob.len());
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn get_blob(&mut self, repository: &str, digest: &Digest) -> Result<Vec<u8>> {
+    pub fn get_blob(&mut self, repository: &str, digest: &Digest) -> Result<Vec<u8>> {
         // Cache key is global (not repository-specific) since blobs are content-addressed
         let cache_key = format!("blobs/{}", digest);
 
@@ -303,10 +302,7 @@ impl Registry {
         }
 
         // Fetch from registry
-        let blob_bytes = self
-            .client
-            .fetch_blob(repository, &digest.to_string())
-            .await?;
+        let blob_bytes = self.client.fetch_blob(repository, &digest.to_string())?;
 
         // Cache the blob with Config type (very long TTL for immutable content)
         if let Some(cache) = &mut self.cache {
@@ -329,20 +325,20 @@ impl Registry {
     /// ```no_run
     /// # use librex::client::Client;
     /// # use librex::registry::Registry;
-    /// # #[tokio::main]
-    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// #
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
     /// let mut registry = Registry::new(client, None, None);
     ///
-    /// match registry.check_version().await {
+    /// match registry.check_version() {
     ///     Ok(_) => println!("Registry is accessible"),
     ///     Err(e) => println!("Failed to connect: {}", e),
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn check_version(&mut self) -> Result<()> {
-        self.client.check_version().await.map(|_| ())
+    pub fn check_version(&mut self) -> Result<()> {
+        self.client.check_version().map(|_| ())
     }
 
     /// Sets the credentials for authenticated requests.

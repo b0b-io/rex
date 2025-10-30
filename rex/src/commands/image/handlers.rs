@@ -3,7 +3,7 @@ use crate::context::VerbosityLevel;
 use crate::format::{self, OutputFormat};
 
 /// Handle the image list command
-pub async fn handle_image_list(
+pub fn handle_image_list(
     ctx: &crate::context::AppContext,
     format: OutputFormat,
     quiet: bool,
@@ -33,7 +33,7 @@ pub async fn handle_image_list(
     };
 
     // List images
-    let images = match list_images(ctx, &registry_url, filter, limit).await {
+    let images = match list_images(ctx, &registry_url, filter, limit) {
         Ok(imgs) => imgs,
         Err(e) => {
             format::error(ctx, &e);
@@ -80,7 +80,7 @@ pub async fn handle_image_list(
 }
 
 /// Handle the image tags command (list tags for a specific image)
-pub async fn handle_image_tags(
+pub fn handle_image_tags(
     ctx: &crate::context::AppContext,
     image_name: &str,
     format: OutputFormat,
@@ -111,7 +111,7 @@ pub async fn handle_image_tags(
     };
 
     // List tags for the image
-    let tags = match list_tags(&registry_url, image_name, filter, limit).await {
+    let tags = match list_tags(&registry_url, image_name, filter, limit) {
         Ok(tags) => tags,
         Err(e) => {
             format::error(ctx, &e);
@@ -158,7 +158,7 @@ pub async fn handle_image_tags(
 }
 
 /// Handle the image details command (show details for image:tag or image@digest)
-pub async fn handle_image_details(
+pub fn handle_image_details(
     ctx: &crate::context::AppContext,
     reference: &str,
     format: OutputFormat,
@@ -179,7 +179,7 @@ pub async fn handle_image_details(
     };
 
     // Get image details
-    let details = match get_image_details(&registry_url, reference).await {
+    let details = match get_image_details(&registry_url, reference) {
         Ok(details) => details,
         Err(e) => {
             format::error(ctx, &e);
@@ -210,7 +210,7 @@ pub async fn handle_image_details(
 }
 
 /// Handle the image inspect command (full detailed inspection)
-pub async fn handle_image_inspect(
+pub fn handle_image_inspect(
     ctx: &crate::context::AppContext,
     reference: &str,
     format: OutputFormat,
@@ -234,7 +234,7 @@ pub async fn handle_image_inspect(
     };
 
     // Get full inspection details
-    let inspect = match get_image_inspect(&registry_url, reference).await {
+    let inspect = match get_image_inspect(&registry_url, reference) {
         Ok(inspect) => inspect,
         Err(e) => {
             format::error(ctx, &e);

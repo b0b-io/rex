@@ -425,7 +425,7 @@ impl Formattable for ImageInspect {
 /// # Returns
 ///
 /// Returns a vector of ImageInfo structs with repository information
-pub(crate) async fn list_images(
+pub(crate) fn list_images(
     ctx: &crate::context::AppContext,
     registry_url: &str,
     filter: Option<&str>,
@@ -463,7 +463,6 @@ pub(crate) async fn list_images(
 
     let mut rex = builder
         .build()
-        .await
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
     // List repositories
@@ -480,7 +479,6 @@ pub(crate) async fn list_images(
     let repos = if let Some(pattern) = filter {
         // Use fuzzy search if filter is provided
         rex.search_repositories(pattern)
-            .await
             .map_err(|e| format!("Failed to search repositories: {}", e))?
             .into_iter()
             .map(|r| r.value)
@@ -488,7 +486,6 @@ pub(crate) async fn list_images(
     } else {
         // List all repositories
         rex.list_repositories()
-            .await
             .map_err(|e| format!("Failed to list repositories: {}", e))?
     };
 
@@ -507,7 +504,7 @@ pub(crate) async fn list_images(
     let mut errors = Vec::new();
 
     for repo in &repos {
-        match rex.list_tags(repo).await {
+        match rex.list_tags(repo) {
             Ok(tags) => {
                 images.push(ImageInfo::new(repo.clone(), tags.len()));
             }
@@ -555,7 +552,7 @@ pub(crate) async fn list_images(
 /// # Returns
 ///
 /// Returns a vector of TagInfo structs with tag information
-pub(crate) async fn list_tags(
+pub(crate) fn list_tags(
     registry_url: &str,
     image_name: &str,
     filter: Option<&str>,
@@ -587,14 +584,12 @@ pub(crate) async fn list_tags(
 
     let mut rex = builder
         .build()
-        .await
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
     // List tags for the repository
     let tags = if let Some(pattern) = filter {
         // Use fuzzy search if filter is provided
         rex.search_tags(image_name, pattern)
-            .await
             .map_err(|e| format!("Failed to search tags: {}", e))?
             .into_iter()
             .map(|r| r.value)
@@ -602,7 +597,6 @@ pub(crate) async fn list_tags(
     } else {
         // List all tags
         rex.list_tags(image_name)
-            .await
             .map_err(|e| format!("Failed to list tags: {}", e))?
     };
 
@@ -619,7 +613,7 @@ pub(crate) async fn list_tags(
         // Fetch manifest for this tag
         let reference = format!("{}:{}", image_name, tag);
 
-        match rex.get_manifest(&reference).await {
+        match rex.get_manifest(&reference) {
             Ok(manifest_or_index) => {
                 // Extract details based on manifest type
                 let (size, platforms, created) = match &manifest_or_index {
@@ -634,7 +628,6 @@ pub(crate) async fn list_tags(
 
                         let config_bytes = rex
                             .get_blob(image_name, &config_digest)
-                            .await
                             .map_err(|e| format!("Failed to get config blob: {}", e))?;
 
                         let config: librex::oci::ImageConfiguration =
@@ -705,7 +698,7 @@ pub(crate) async fn list_tags(
 /// # Returns
 ///
 /// Returns ImageDetails with manifest information
-pub(crate) async fn get_image_details(
+pub(crate) fn get_image_details(
     registry_url: &str,
     reference_str: &str,
 ) -> Result<ImageDetails, String> {
@@ -735,7 +728,6 @@ pub(crate) async fn get_image_details(
 
     let mut rex = builder
         .build()
-        .await
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
     // Parse the reference to validate it
@@ -745,7 +737,6 @@ pub(crate) async fn get_image_details(
     // Get the manifest (Rex::get_manifest expects a string reference)
     let manifest_or_index = rex
         .get_manifest(reference_str)
-        .await
         .map_err(|e| format!("Failed to fetch manifest: {}", e))?;
 
     // Extract details based on manifest type
@@ -765,7 +756,6 @@ pub(crate) async fn get_image_details(
                 // Fetch config blob
                 let config_bytes = rex
                     .get_blob(reference.repository(), &config_digest)
-                    .await
                     .map_err(|e| format!("Failed to fetch config blob: {}", e))?;
 
                 // Parse config JSON
@@ -842,7 +832,7 @@ pub(crate) async fn get_image_details(
 /// # Returns
 ///
 /// Returns ImageInspect with complete manifest, config, layers, and history information
-pub(crate) async fn get_image_inspect(
+pub(crate) fn get_image_inspect(
     registry_url: &str,
     reference_str: &str,
 ) -> Result<ImageInspect, String> {
@@ -872,7 +862,6 @@ pub(crate) async fn get_image_inspect(
 
     let mut rex = builder
         .build()
-        .await
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
     // Parse the reference to validate it
@@ -882,7 +871,6 @@ pub(crate) async fn get_image_inspect(
     // Get the manifest
     let manifest_or_index = rex
         .get_manifest(reference_str)
-        .await
         .map_err(|e| format!("Failed to fetch manifest: {}", e))?;
 
     // For now, we only support single-platform manifests for inspect
@@ -904,7 +892,6 @@ pub(crate) async fn get_image_inspect(
 
     let config_bytes = rex
         .get_blob(reference.repository(), &config_digest)
-        .await
         .map_err(|e| format!("Failed to fetch config blob: {}", e))?;
 
     let config: librex::oci::ImageConfiguration = serde_json::from_slice(&config_bytes)

@@ -8,25 +8,25 @@
 //! ```no_run
 //! use librex::Rex;
 //!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Connect to a registry
-//!     let mut rex = Rex::connect("http://localhost:5000").await?;
+//!     let mut rex = Rex::connect("http://localhost:5000")?;
 //!
 //!     // List all repositories
-//!     let repos = rex.list_repositories().await?;
+//!     let repos = rex.list_repositories()?;
 //!     for repo in repos {
 //!         println!("{}", repo);
 //!     }
 //!
 //!     // List tags for a repository
-//!     let tags = rex.list_tags("alpine").await?;
+//!     let tags = rex.list_tags("alpine")?;
 //!     for tag in tags {
 //!         println!("{}", tag);
 //!     }
 //!
 //!     // Search for repositories
-//!     let results = rex.search_repositories("alp").await?;
+//!     let results = rex.search_repositories("alp")?;
 //!     for result in results {
 //!         println!("{}", result.value);
 //!     }
@@ -62,10 +62,10 @@ use std::path::PathBuf;
 /// ```no_run
 /// use librex::Rex;
 ///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let mut rex = Rex::connect("http://localhost:5000").await?;
-///     let repos = rex.list_repositories().await?;
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let mut rex = Rex::connect("http://localhost:5000")?;
+///     let repos = rex.list_repositories()?;
 ///     println!("Found {} repositories", repos.len());
 ///     Ok(())
 /// }
@@ -76,9 +76,9 @@ use std::path::PathBuf;
 /// ```no_run
 /// use librex::{Rex, Credentials};
 ///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let mut rex = Rex::connect("https://registry.example.com").await?;
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let mut rex = Rex::connect("https://registry.example.com")?;
 ///
 ///     let creds = Credentials::Basic {
 ///         username: "user".to_string(),
@@ -86,7 +86,7 @@ use std::path::PathBuf;
 ///     };
 ///     rex.login(creds);
 ///
-///     let repos = rex.list_repositories().await?;
+///     let repos = rex.list_repositories()?;
 ///     Ok(())
 /// }
 /// ```
@@ -96,15 +96,15 @@ use std::path::PathBuf;
 /// ```no_run
 /// use librex::Rex;
 ///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     let mut rex = Rex::builder()
 ///         .registry_url("http://localhost:5000")
 ///         .with_cache("/tmp/rex-cache")
 ///         .build()
-///         .await?;
+///         ?;
 ///
-///     let repos = rex.list_repositories().await?;
+///     let repos = rex.list_repositories()?;
 ///     Ok(())
 /// }
 /// ```
@@ -138,13 +138,13 @@ impl Rex {
     /// ```no_run
     /// use librex::Rex;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
     ///     Ok(())
     /// }
     /// ```
-    pub async fn connect(registry_url: &str) -> Result<Self> {
+    pub fn connect(registry_url: &str) -> Result<Self> {
         let client = Client::new(registry_url, None)?;
         let registry = Registry::new(client, None, None);
 
@@ -166,13 +166,13 @@ impl Rex {
     /// ```no_run
     /// use librex::Rex;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
     ///     let mut rex = Rex::builder()
     ///         .registry_url("http://localhost:5000")
     ///         .with_cache("/tmp/rex-cache")
     ///         .build()
-    ///         .await?;
+    ///         ?;
     ///     Ok(())
     /// }
     /// ```
@@ -189,16 +189,16 @@ impl Rex {
     /// ```no_run
     /// use librex::Rex;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
-    ///     rex.check().await?;
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
+    ///     rex.check()?;
     ///     println!("Registry is accessible!");
     ///     Ok(())
     /// }
     /// ```
-    pub async fn check(&mut self) -> Result<()> {
-        self.registry.check_version().await
+    pub fn check(&mut self) -> Result<()> {
+        self.registry.check_version()
     }
 
     /// Set credentials for authenticated requests.
@@ -212,9 +212,9 @@ impl Rex {
     /// ```no_run
     /// use librex::{Rex, Credentials};
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("https://registry.example.com").await?;
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("https://registry.example.com")?;
     ///
     ///     rex.login(Credentials::Basic {
     ///         username: "user".to_string(),
@@ -235,9 +235,9 @@ impl Rex {
     /// ```no_run
     /// use librex::Rex;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
     ///     rex.logout();
     ///     Ok(())
     /// }
@@ -260,11 +260,11 @@ impl Rex {
     /// ```no_run
     /// use librex::Rex;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
     ///
-    ///     let repos = rex.list_repositories().await?;
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
+    ///
+    ///     let repos = rex.list_repositories()?;
     ///     for repo in repos {
     ///         println!("{}", repo);
     ///     }
@@ -272,8 +272,8 @@ impl Rex {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn list_repositories(&mut self) -> Result<Vec<String>> {
-        let repos = self.registry.list_repositories().await?;
+    pub fn list_repositories(&mut self) -> Result<Vec<String>> {
+        let repos = self.registry.list_repositories()?;
         self.cached_repositories = Some(repos.clone());
         Ok(repos)
     }
@@ -293,11 +293,11 @@ impl Rex {
     /// ```no_run
     /// use librex::Rex;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
     ///
-    ///     let tags = rex.list_tags("alpine").await?;
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
+    ///
+    ///     let tags = rex.list_tags("alpine")?;
     ///     for tag in tags {
     ///         println!("{}", tag);
     ///     }
@@ -305,8 +305,8 @@ impl Rex {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn list_tags(&mut self, repository: &str) -> Result<Vec<String>> {
-        let tags = self.registry.list_tags(repository).await?;
+    pub fn list_tags(&mut self, repository: &str) -> Result<Vec<String>> {
+        let tags = self.registry.list_tags(repository)?;
         self.cached_tags
             .insert(repository.to_string(), tags.clone());
         Ok(tags)
@@ -335,11 +335,11 @@ impl Rex {
     /// ```no_run
     /// use librex::{Rex, ManifestOrIndex};
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
     ///
-    ///     let manifest_or_index = rex.get_manifest("alpine:latest").await?;
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
+    ///
+    ///     let manifest_or_index = rex.get_manifest("alpine:latest")?;
     ///     match manifest_or_index {
     ///         ManifestOrIndex::Manifest(manifest) => {
     ///             println!("Single-platform: {} layers", manifest.layers().len());
@@ -350,7 +350,7 @@ impl Rex {
     ///     }
     ///
     ///     // Or use helper methods:
-    ///     let manifest_or_index = rex.get_manifest("alpine:latest").await?;
+    ///     let manifest_or_index = rex.get_manifest("alpine:latest")?;
     ///     if let Some(manifest) = manifest_or_index.as_manifest() {
     ///         println!("Layers: {}", manifest.layers().len());
     ///     }
@@ -358,9 +358,9 @@ impl Rex {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn get_manifest(&mut self, image: &str) -> Result<ManifestOrIndex> {
+    pub fn get_manifest(&mut self, image: &str) -> Result<ManifestOrIndex> {
         let reference = image.parse::<Reference>()?;
-        self.registry.get_manifest(&reference).await
+        self.registry.get_manifest(&reference)
     }
 
     /// List available platforms for a multi-platform image.
@@ -381,11 +381,11 @@ impl Rex {
     /// ```no_run
     /// use librex::Rex;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
     ///
-    ///     let platforms = rex.list_platforms("alpine:latest").await?;
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
+    ///
+    ///     let platforms = rex.list_platforms("alpine:latest")?;
     ///     for (os, arch, variant) in platforms {
     ///         match variant {
     ///             Some(v) => println!("{}/{}/{}", os, arch, v),
@@ -396,11 +396,8 @@ impl Rex {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn list_platforms(
-        &mut self,
-        image: &str,
-    ) -> Result<Vec<(String, String, Option<String>)>> {
-        let manifest_or_index = self.get_manifest(image).await?;
+    pub fn list_platforms(&mut self, image: &str) -> Result<Vec<(String, String, Option<String>)>> {
+        let manifest_or_index = self.get_manifest(image)?;
         let platforms = manifest_or_index.platforms();
 
         Ok(platforms
@@ -431,19 +428,19 @@ impl Rex {
     /// ```no_run
     /// use librex::Rex;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
     ///
     ///     let digest = "sha256:abc123...".parse()?;
-    ///     let blob = rex.get_blob("alpine", &digest).await?;
+    ///     let blob = rex.get_blob("alpine", &digest)?;
     ///     println!("Blob size: {} bytes", blob.len());
     ///
     ///     Ok(())
     /// }
     /// ```
-    pub async fn get_blob(&mut self, repository: &str, digest: &Digest) -> Result<Vec<u8>> {
-        self.registry.get_blob(repository, digest).await
+    pub fn get_blob(&mut self, repository: &str, digest: &Digest) -> Result<Vec<u8>> {
+        self.registry.get_blob(repository, digest)
     }
 
     /// Search for repositories by name using fuzzy matching.
@@ -464,11 +461,11 @@ impl Rex {
     /// ```no_run
     /// use librex::Rex;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
     ///
-    ///     let results = rex.search_repositories("alp").await?;
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
+    ///
+    ///     let results = rex.search_repositories("alp")?;
     ///     for result in results {
     ///         println!("{} (score: {})", result.value, result.score);
     ///     }
@@ -476,10 +473,10 @@ impl Rex {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn search_repositories(&mut self, query: &str) -> Result<Vec<SearchResult>> {
+    pub fn search_repositories(&mut self, query: &str) -> Result<Vec<SearchResult>> {
         // Fetch repositories if not cached
         if self.cached_repositories.is_none() {
-            self.list_repositories().await?;
+            self.list_repositories()?;
         }
 
         let repos = self.cached_repositories.as_ref().unwrap();
@@ -502,11 +499,11 @@ impl Rex {
     /// ```no_run
     /// use librex::Rex;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
     ///
-    ///     let results = rex.search_tags("alpine", "lat").await?;
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
+    ///
+    ///     let results = rex.search_tags("alpine", "lat")?;
     ///     for result in results {
     ///         println!("{}", result.value);
     ///     }
@@ -514,14 +511,10 @@ impl Rex {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn search_tags(
-        &mut self,
-        repository: &str,
-        query: &str,
-    ) -> Result<Vec<SearchResult>> {
+    pub fn search_tags(&mut self, repository: &str, query: &str) -> Result<Vec<SearchResult>> {
         // Fetch tags if not cached
         if !self.cached_tags.contains_key(repository) {
-            self.list_tags(repository).await?;
+            self.list_tags(repository)?;
         }
 
         let tags = self.cached_tags.get(repository).unwrap();
@@ -546,15 +539,15 @@ impl Rex {
     /// ```no_run
     /// use librex::Rex;
     ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    ///     let mut rex = Rex::connect("http://localhost:5000").await?;
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
     ///
     ///     // Search for repositories matching "alp"
-    ///     let results = rex.search_images("alp").await?;
+    ///     let results = rex.search_images("alp")?;
     ///
     ///     // Search for repositories matching "alp" with tags matching "lat"
-    ///     let results = rex.search_images("alp:lat").await?;
+    ///     let results = rex.search_images("alp:lat")?;
     ///
     ///     for result in results {
     ///         println!("{}", result.value);
@@ -563,10 +556,10 @@ impl Rex {
     ///     Ok(())
     /// }
     /// ```
-    pub async fn search_images(&mut self, query: &str) -> Result<Vec<SearchResult>> {
+    pub fn search_images(&mut self, query: &str) -> Result<Vec<SearchResult>> {
         // Fetch repositories if not cached
         if self.cached_repositories.is_none() {
-            self.list_repositories().await?;
+            self.list_repositories()?;
         }
 
         // Clone repos list to avoid borrow conflicts
@@ -575,7 +568,7 @@ impl Rex {
         // Fetch tags for all repositories if not cached
         for repo in &repos {
             if !self.cached_tags.contains_key(repo)
-                && let Ok(tags) = self.list_tags(repo).await
+                && let Ok(tags) = self.list_tags(repo)
             {
                 self.cached_tags.insert(repo.clone(), tags);
             }
@@ -597,14 +590,14 @@ impl Rex {
 /// ```no_run
 /// use librex::Rex;
 ///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///
+/// fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///     let mut rex = Rex::builder()
 ///         .registry_url("http://localhost:5000")
 ///         .with_cache("/tmp/rex-cache")
 ///         .with_config_file("./config.toml")
 ///         .build()
-///         .await?;
+///         ?;
 ///     Ok(())
 /// }
 /// ```
@@ -662,7 +655,7 @@ impl RexBuilder {
     }
 
     /// Build the `Rex` instance.
-    pub async fn build(self) -> Result<Rex> {
+    pub fn build(self) -> Result<Rex> {
         let registry_url = self
             .registry_url
             .ok_or_else(|| crate::error::RexError::validation("Registry URL is required"))?;
