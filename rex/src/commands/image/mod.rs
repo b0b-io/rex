@@ -455,10 +455,10 @@ pub(crate) fn list_images(
     // Build Rex instance with cache and credentials
     let mut builder = librex::Rex::builder()
         .registry_url(registry_url)
-        .with_cache(cache_dir);
+        .with_cache(cache_dir.clone());
 
-    if let Some(creds) = credentials {
-        builder = builder.with_credentials(creds);
+    if let Some(ref creds) = credentials {
+        builder = builder.with_credentials(creds.clone());
     }
 
     let mut rex = builder
@@ -496,29 +496,88 @@ pub(crate) fn list_images(
         repos
     };
 
-    // For each repository, get tag count and latest tag info
+    // For each repository, get tag count in parallel
+    use rayon::prelude::*;
+    use std::sync::{Arc, Mutex};
+
     let formatter = crate::format::create_formatter(ctx);
     let pb = formatter.progress_bar(repos.len() as u64, "Fetching image information");
+    let pb = Arc::new(Mutex::new(pb));
 
+    // Clone credentials for parallel access
+    let credentials_clone = credentials.clone();
+    let registry_url_str = registry_url.to_string();
+    let cache_dir_clone = cache_dir.clone();
+
+    // Configure thread pool with reasonable concurrency limit from config
+    let concurrency = ctx.config.concurrency.min(repos.len()).max(1);
+
+    format::print(
+        ctx,
+        VerbosityLevel::VeryVerbose,
+        &format!("Using {} concurrent connections", concurrency),
+    );
+
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(concurrency)
+        .build()
+        .map_err(|e| format!("Failed to create thread pool: {}", e))?;
+
+    // Parallel fetch tag counts for all repositories
+    let results: Vec<_> = pool.install(|| {
+        repos
+            .par_iter()
+            .map(|repo| {
+                // Each thread gets its own Rex instance
+                let mut builder = librex::Rex::builder()
+                    .registry_url(&registry_url_str)
+                    .with_cache(cache_dir_clone.clone());
+
+                if let Some(ref creds) = credentials_clone {
+                    builder = builder.with_credentials(creds.clone());
+                }
+
+                let mut thread_rex = match builder.build() {
+                    Ok(r) => r,
+                    Err(e) => return Err((repo.clone(), format!("Connection error: {}", e))),
+                };
+
+                let result = match thread_rex.list_tags(repo) {
+                    Ok(tags) => Ok((repo.clone(), tags.len())),
+                    Err(e) => Err((repo.clone(), e.to_string())),
+                };
+
+                // Update progress bar (thread-safe)
+                if let Ok(pb) = pb.lock() {
+                    pb.inc(1);
+                }
+
+                result
+            })
+            .collect()
+    });
+
+    // Separate successes from errors
     let mut images = Vec::new();
     let mut errors = Vec::new();
 
-    for repo in &repos {
-        match rex.list_tags(repo) {
-            Ok(tags) => {
-                images.push(ImageInfo::new(repo.clone(), tags.len()));
+    for result in results {
+        match result {
+            Ok((repo, tag_count)) => {
+                images.push(ImageInfo::new(repo, tag_count));
             }
-            Err(e) => {
-                errors.push(format!("{}: {}", repo, e));
+            Err((repo, error)) => {
+                errors.push(format!("{}: {}", repo, error));
             }
         }
-        pb.inc(1);
     }
 
-    formatter.finish_progress(
-        pb,
-        &format!("Fetched information for {} images", images.len()),
-    );
+    if let Ok(pb) = pb.lock() {
+        formatter.finish_progress(
+            pb.clone(),
+            &format!("Fetched information for {} images", images.len()),
+        );
+    }
 
     // Report errors as warnings if some succeeded
     if !errors.is_empty() {
@@ -544,6 +603,7 @@ pub(crate) fn list_images(
 ///
 /// # Arguments
 ///
+/// * `ctx` - Application context with configuration
 /// * `registry_url` - URL of the registry to query
 /// * `image_name` - Name of the repository/image
 /// * `filter` - Optional filter pattern for fuzzy matching
@@ -553,6 +613,7 @@ pub(crate) fn list_images(
 ///
 /// Returns a vector of TagInfo structs with tag information
 pub(crate) fn list_tags(
+    ctx: &crate::context::AppContext,
     registry_url: &str,
     image_name: &str,
     filter: Option<&str>,
@@ -576,10 +637,10 @@ pub(crate) fn list_tags(
     // Build Rex instance with cache and credentials
     let mut builder = librex::Rex::builder()
         .registry_url(registry_url)
-        .with_cache(cache_dir);
+        .with_cache(cache_dir.clone());
 
-    if let Some(creds) = credentials {
-        builder = builder.with_credentials(creds);
+    if let Some(ref creds) = credentials {
+        builder = builder.with_credentials(creds.clone());
     }
 
     let mut rex = builder
@@ -607,72 +668,158 @@ pub(crate) fn list_tags(
         tags
     };
 
-    // Fetch manifest details for each tag
-    let mut tag_infos = Vec::new();
-    for tag in tags {
-        // Fetch manifest for this tag
-        let reference = format!("{}:{}", image_name, tag);
+    // Fetch manifest details for each tag in parallel
+    use rayon::prelude::*;
+    use std::sync::{Arc, Mutex};
 
-        match rex.get_manifest(&reference) {
-            Ok(manifest_or_index) => {
-                // Extract details based on manifest type
-                let (size, platforms, created) = match &manifest_or_index {
-                    librex::oci::ManifestOrIndex::Manifest(manifest) => {
-                        let total_size: u64 =
-                            manifest.layers().iter().map(|layer| layer.size()).sum();
+    // Configure thread pool with reasonable concurrency limit from config
+    let concurrency = ctx.config.concurrency.min(tags.len()).max(1);
 
-                        // Get config to extract platform and created timestamp
-                        let config_digest_str = manifest.config().digest().to_string();
-                        let config_digest = librex::digest::Digest::from_str(&config_digest_str)
-                            .map_err(|e| format!("Invalid config digest: {}", e))?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(concurrency)
+        .build()
+        .map_err(|e| format!("Failed to create thread pool: {}", e))?;
 
-                        let config_bytes = rex
-                            .get_blob(image_name, &config_digest)
-                            .map_err(|e| format!("Failed to get config blob: {}", e))?;
+    // Create progress bar
+    let formatter = crate::format::create_formatter(ctx);
+    let pb = formatter.progress_bar(tags.len() as u64, "Fetching tag details");
+    let pb = Arc::new(Mutex::new(pb));
 
-                        let config: librex::oci::ImageConfiguration =
-                            serde_json::from_slice(&config_bytes)
-                                .map_err(|e| format!("Failed to parse config: {}", e))?;
+    // Clone necessary data for parallel access
+    let registry_url_str = registry_url.to_string();
+    let cache_dir_clone = cache_dir.clone();
+    let credentials_clone = credentials.clone();
+    let image_name_str = image_name.to_string();
 
-                        let platform = vec![format!("{}/{}", config.os(), config.architecture())];
-                        // Parse created timestamp from ISO 8601 string to DateTime
-                        let created_ts = config.created().as_ref().and_then(|ts| {
-                            chrono::DateTime::parse_from_rfc3339(ts)
-                                .ok()
-                                .map(|dt| dt.with_timezone(&chrono::Utc))
-                        });
+    let mut tag_infos: Vec<TagInfo> = pool.install(|| {
+        tags.par_iter()
+            .filter_map(|tag| {
+                // Each thread gets its own Rex instance
+                let mut builder = librex::Rex::builder()
+                    .registry_url(&registry_url_str)
+                    .with_cache(cache_dir_clone.clone());
 
-                        (total_size, platform, created_ts)
-                    }
-                    librex::oci::ManifestOrIndex::Index(index) => {
-                        let total_size: u64 = index.manifests().iter().map(|m| m.size()).sum();
-                        let platforms: Vec<String> = index
-                            .manifests()
-                            .iter()
-                            .filter_map(|m| {
-                                m.platform()
-                                    .as_ref()
-                                    .map(|p| format!("{}/{}", p.os(), p.architecture()))
-                            })
-                            .collect();
+                if let Some(ref creds) = credentials_clone {
+                    builder = builder.with_credentials(creds.clone());
+                }
 
-                        (total_size, platforms, None)
+                let mut thread_rex = match builder.build() {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!("Warning: Failed to connect for tag {}: {}", tag, e);
+
+                        let result = Some(TagInfo::new(
+                            tag.clone(),
+                            "N/A".to_string(),
+                            0,
+                            None,
+                            vec![],
+                        ));
+
+                        // Update progress bar (thread-safe)
+                        if let Ok(pb) = pb.lock() {
+                            pb.inc(1);
+                        }
+
+                        return result;
                     }
                 };
 
-                // For now, use a placeholder digest since we can't easily get it from ManifestOrIndex
-                // TODO: Enhance librex to return digest along with manifest
-                let digest = "sha256:...".to_string();
+                // Fetch manifest for this tag
+                let reference = format!("{}:{}", image_name_str, tag);
 
-                tag_infos.push(TagInfo::new(tag, digest, size, created, platforms));
-            }
-            Err(e) => {
-                // If we can't fetch manifest, create a minimal TagInfo
-                eprintln!("Warning: Failed to fetch manifest for {}: {}", reference, e);
-                tag_infos.push(TagInfo::new(tag, "N/A".to_string(), 0, None, vec![]));
-            }
-        }
-    }
+                match thread_rex.get_manifest(&reference) {
+                    Ok(manifest_or_index) => {
+                        // Extract details based on manifest type
+                        let (size, platforms, created) = match &manifest_or_index {
+                            librex::oci::ManifestOrIndex::Manifest(manifest) => {
+                                let total_size: u64 =
+                                    manifest.layers().iter().map(|layer| layer.size()).sum();
+
+                                // Get config to extract platform and created timestamp
+                                let config_digest_str = manifest.config().digest().to_string();
+                                let config_digest =
+                                    librex::digest::Digest::from_str(&config_digest_str).ok()?;
+
+                                let config_bytes = thread_rex
+                                    .get_blob(&image_name_str, &config_digest)
+                                    .map_err(|e| format!("Failed to get config blob: {}", e))
+                                    .ok()?;
+
+                                let config: librex::oci::ImageConfiguration =
+                                    serde_json::from_slice(&config_bytes).ok()?;
+
+                                let platform =
+                                    vec![format!("{}/{}", config.os(), config.architecture())];
+                                // Parse created timestamp from ISO 8601 string to DateTime
+                                let created_ts = config.created().as_ref().and_then(|ts| {
+                                    chrono::DateTime::parse_from_rfc3339(ts)
+                                        .ok()
+                                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                                });
+
+                                (total_size, platform, created_ts)
+                            }
+                            librex::oci::ManifestOrIndex::Index(index) => {
+                                let total_size: u64 =
+                                    index.manifests().iter().map(|m| m.size()).sum();
+                                let platforms: Vec<String> = index
+                                    .manifests()
+                                    .iter()
+                                    .filter_map(|m| {
+                                        m.platform()
+                                            .as_ref()
+                                            .map(|p| format!("{}/{}", p.os(), p.architecture()))
+                                    })
+                                    .collect();
+
+                                (total_size, platforms, None)
+                            }
+                        };
+
+                        // For now, use a placeholder digest since we can't easily get it from ManifestOrIndex
+                        // TODO: Enhance librex to return digest along with manifest
+                        let digest = "sha256:...".to_string();
+
+                        let result =
+                            Some(TagInfo::new(tag.clone(), digest, size, created, platforms));
+
+                        // Update progress bar (thread-safe)
+                        if let Ok(pb) = pb.lock() {
+                            pb.inc(1);
+                        }
+
+                        result
+                    }
+                    Err(e) => {
+                        // If we can't fetch manifest, create a minimal TagInfo
+                        eprintln!("Warning: Failed to fetch manifest for {}: {}", reference, e);
+
+                        let result = Some(TagInfo::new(
+                            tag.clone(),
+                            "N/A".to_string(),
+                            0,
+                            None,
+                            vec![],
+                        ));
+
+                        // Update progress bar (thread-safe)
+                        if let Ok(pb) = pb.lock() {
+                            pb.inc(1);
+                        }
+
+                        result
+                    }
+                }
+            })
+            .collect()
+    });
+
+    // Finish progress bar
+    formatter.finish_progress(
+        pb.lock().unwrap().clone(),
+        &format!("Fetched details for {} tags", tag_infos.len()),
+    );
 
     // Sort by created timestamp in reverse chronological order (newest first)
     // Tags without timestamps are placed at the end
@@ -720,10 +867,10 @@ pub(crate) fn get_image_details(
     // Build Rex instance with cache and credentials
     let mut builder = librex::Rex::builder()
         .registry_url(registry_url)
-        .with_cache(cache_dir);
+        .with_cache(cache_dir.clone());
 
-    if let Some(creds) = credentials {
-        builder = builder.with_credentials(creds);
+    if let Some(ref creds) = credentials {
+        builder = builder.with_credentials(creds.clone());
     }
 
     let mut rex = builder
@@ -854,10 +1001,10 @@ pub(crate) fn get_image_inspect(
     // Build Rex instance with cache and credentials
     let mut builder = librex::Rex::builder()
         .registry_url(registry_url)
-        .with_cache(cache_dir);
+        .with_cache(cache_dir.clone());
 
-    if let Some(creds) = credentials {
-        builder = builder.with_credentials(creds);
+    if let Some(ref creds) = credentials {
+        builder = builder.with_credentials(creds.clone());
     }
 
     let mut rex = builder

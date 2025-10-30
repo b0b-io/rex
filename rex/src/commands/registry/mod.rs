@@ -915,8 +915,8 @@ fn sync_single_registry(
         .registry_url(registry_url)
         .with_cache(cache_path_ref);
 
-    if let Some(creds) = credentials {
-        builder = builder.with_credentials(creds);
+    if let Some(ref creds) = credentials {
+        builder = builder.with_credentials(creds.clone());
     }
 
     let mut rex = builder
@@ -945,26 +945,62 @@ fn sync_single_registry(
     };
     stats.catalog_entries = repos.len() as u64;
 
-    // Fetch tags for each repository with progress bar
+    // Fetch tags for each repository in parallel with progress bar
+    use rayon::prelude::*;
+    use std::sync::{Arc, Mutex};
+
     let pb = formatter.progress_bar(repos.len() as u64, "Fetching tags");
+    let pb = Arc::new(Mutex::new(pb));
 
-    let mut total_tags = 0;
-    let mut errors = Vec::new();
+    // Get concurrency limit from context config
+    let concurrency = ctx.config.concurrency.min(repos.len()).max(1);
 
-    for repo in &repos {
-        match rex.list_tags(repo) {
-            Ok(tags) => {
-                total_tags += tags.len();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(concurrency)
+        .build()
+        .map_err(|e| format!("Failed to create thread pool: {}", e))?;
+
+    // Clone necessary data for parallel access
+    let registry_url_str = registry_url.to_string();
+    let cache_dir_clone = cache_dir.clone();
+    let credentials_clone = credentials.clone();
+
+    // Parallel fetch tags and optionally manifests
+    let results: Vec<_> = pool.install(|| {
+        repos
+            .par_iter()
+            .map(|repo| {
+                // Each thread gets its own Rex instance
+                let mut builder = librex::Rex::builder()
+                    .registry_url(&registry_url_str)
+                    .with_cache(cache_dir_clone.clone());
+
+                if let Some(ref creds) = credentials_clone {
+                    builder = builder.with_credentials(creds.clone());
+                }
+
+                let mut thread_rex = match builder.build() {
+                    Ok(r) => r,
+                    Err(e) => return Err((repo.clone(), format!("Connection error: {}", e))),
+                };
+
+                // Fetch tags for this repository
+                let tags = match thread_rex.list_tags(repo) {
+                    Ok(tags) => tags,
+                    Err(e) => return Err((repo.clone(), e.to_string())),
+                };
+
+                let tag_count = tags.len();
+                let mut manifest_count = 0;
+                let mut config_count = 0;
 
                 // Fetch manifests and configs if requested
-                // Note: Due to Rust's borrow checker, we process these sequentially
-                // but the actual fetches are fast due to caching
                 if manifests {
                     for tag in &tags {
                         let reference = format!("{}:{}", repo, tag);
                         // Fetch manifest
-                        if let Ok(manifest_or_index) = rex.get_manifest(&reference) {
-                            stats.manifest_entries += 1;
+                        if let Ok(manifest_or_index) = thread_rex.get_manifest(&reference) {
+                            manifest_count += 1;
 
                             // Fetch config blob if this is a manifest (not an index)
                             if let Some(manifest) = manifest_or_index.as_manifest() {
@@ -972,23 +1008,42 @@ fn sync_single_registry(
                                 if let Ok(config_digest) =
                                     librex::digest::Digest::from_str(&config_digest_str)
                                 {
-                                    let _ = rex.get_blob(repo, &config_digest); // Cache the config blob
-                                    stats.config_entries += 1;
+                                    let _ = thread_rex.get_blob(repo, &config_digest);
+                                    config_count += 1;
                                 }
                             }
                         }
                     }
                 }
+
+                // Update progress bar (thread-safe)
+                if let Ok(pb) = pb.lock() {
+                    pb.inc(1);
+                }
+
+                Ok((repo.clone(), tag_count, manifest_count, config_count))
+            })
+            .collect()
+    });
+
+    let mut total_tags = 0;
+    let mut errors = Vec::new();
+
+    for result in results {
+        match result {
+            Ok((_repo, tag_count, manifest_count, config_count)) => {
+                total_tags += tag_count;
+                stats.manifest_entries += manifest_count as u64;
+                stats.config_entries += config_count as u64;
             }
-            Err(e) => {
-                errors.push(format!("{}: {}", repo, e));
+            Err((repo, error)) => {
+                errors.push(format!("{}: {}", repo, error));
             }
         }
-        pb.inc(1);
     }
 
     formatter.finish_progress(
-        pb,
+        pb.lock().unwrap().clone(),
         &format!(
             "Fetched {} tags across {} repositories",
             total_tags,

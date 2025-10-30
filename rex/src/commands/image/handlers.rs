@@ -111,7 +111,7 @@ pub fn handle_image_tags(
     };
 
     // List tags for the image
-    let tags = match list_tags(&registry_url, image_name, filter, limit) {
+    let tags = match list_tags(ctx, &registry_url, image_name, filter, limit) {
         Ok(tags) => tags,
         Err(e) => {
             format::error(ctx, &e);
