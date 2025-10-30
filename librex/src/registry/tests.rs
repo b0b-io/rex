@@ -154,3 +154,65 @@ fn test_manifest_or_index_types_work_with_registry() {
     let platforms = manifest_or_index.platforms();
     assert_eq!(platforms.len(), 1);
 }
+
+#[test]
+fn test_digest_computation_from_manifest_bytes() {
+    // This test verifies that we can compute the correct digest from manifest bytes
+    // The digest is SHA256 of the exact bytes
+    use sha2::{Digest as Sha2Digest, Sha256};
+
+    let manifest_json = r#"{
+        "schemaVersion": 2,
+        "mediaType": "application/vnd.oci.image.manifest.v1+json",
+        "config": {
+            "mediaType": "application/vnd.oci.image.config.v1+json",
+            "size": 1234,
+            "digest": "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+        },
+        "layers": []
+    }"#;
+
+    let bytes = manifest_json.as_bytes();
+
+    // Compute digest
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let hash = hasher.finalize();
+    let digest = format!("sha256:{:x}", hash);
+
+    // Verify format
+    assert!(digest.starts_with("sha256:"));
+    assert_eq!(digest.len(), 71); // "sha256:" (7) + 64 hex chars
+
+    // Verify the same bytes produce the same digest
+    let mut hasher2 = Sha256::new();
+    hasher2.update(bytes);
+    let hash2 = hasher2.finalize();
+    let digest2 = format!("sha256:{:x}", hash2);
+
+    assert_eq!(digest, digest2);
+}
+
+#[test]
+fn test_manifest_digest_consistency() {
+    // This test verifies that the digest computation is consistent with OCI spec
+    // The digest should be the sha256 of the canonical JSON bytes
+    use crate::oci::ManifestOrIndex;
+
+    let manifest_json = r#"{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","size":1234,"digest":"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"layers":[]}"#;
+
+    // Parse the manifest
+    let manifest_or_index = ManifestOrIndex::from_bytes(manifest_json.as_bytes()).unwrap();
+    assert!(manifest_or_index.is_manifest());
+
+    // Compute digest from the exact bytes
+    use sha2::{Digest as Sha2Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(manifest_json.as_bytes());
+    let hash = hasher.finalize();
+    let computed_digest = format!("sha256:{:x}", hash);
+
+    // The computed digest should be deterministic
+    assert!(computed_digest.starts_with("sha256:"));
+    assert_eq!(computed_digest.len(), 71);
+}

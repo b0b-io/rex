@@ -327,8 +327,9 @@ impl Rex {
     ///
     /// # Returns
     ///
-    /// A `ManifestOrIndex` enum containing either a single-platform manifest
-    /// or a multi-platform index.
+    /// A tuple containing:
+    /// - `ManifestOrIndex` enum (either a single-platform manifest or multi-platform index)
+    /// - The manifest digest as returned by the registry
     ///
     /// # Examples
     ///
@@ -339,7 +340,8 @@ impl Rex {
     /// fn main() -> Result<(), Box<dyn std::error::Error>> {
     ///     let mut rex = Rex::connect("http://localhost:5000")?;
     ///
-    ///     let manifest_or_index = rex.get_manifest("alpine:latest")?;
+    ///     let (manifest_or_index, digest) = rex.get_manifest("alpine:latest")?;
+    ///     println!("Digest: {}", digest);
     ///     match manifest_or_index {
     ///         ManifestOrIndex::Manifest(manifest) => {
     ///             println!("Single-platform: {} layers", manifest.layers().len());
@@ -350,7 +352,7 @@ impl Rex {
     ///     }
     ///
     ///     // Or use helper methods:
-    ///     let manifest_or_index = rex.get_manifest("alpine:latest")?;
+    ///     let (manifest_or_index, _) = rex.get_manifest("alpine:latest")?;
     ///     if let Some(manifest) = manifest_or_index.as_manifest() {
     ///         println!("Layers: {}", manifest.layers().len());
     ///     }
@@ -358,7 +360,7 @@ impl Rex {
     ///     Ok(())
     /// }
     /// ```
-    pub fn get_manifest(&mut self, image: &str) -> Result<ManifestOrIndex> {
+    pub fn get_manifest(&mut self, image: &str) -> Result<(ManifestOrIndex, String)> {
         let reference = image.parse::<Reference>()?;
         self.registry.get_manifest(&reference)
     }
@@ -397,7 +399,7 @@ impl Rex {
     /// }
     /// ```
     pub fn list_platforms(&mut self, image: &str) -> Result<Vec<(String, String, Option<String>)>> {
-        let manifest_or_index = self.get_manifest(image)?;
+        let (manifest_or_index, _digest) = self.get_manifest(image)?;
         let platforms = manifest_or_index.platforms();
 
         Ok(platforms
