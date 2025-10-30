@@ -183,9 +183,9 @@ impl Registry {
     ///
     /// # Returns
     ///
-    /// A `ManifestOrIndex` enum containing either:
-    /// - `Manifest` for single-platform images
-    /// - `Index` for multi-platform images
+    /// A tuple containing:
+    /// - `ManifestOrIndex` enum (either `Manifest` or `Index`)
+    /// - The manifest digest as returned by the registry
     ///
     /// # Examples
     ///
@@ -200,7 +200,8 @@ impl Registry {
     /// let mut registry = Registry::new(client, None, None);
     /// let reference = Reference::from_str("alpine:latest")?;
     ///
-    /// let manifest_or_index = registry.get_manifest(&reference)?;
+    /// let (manifest_or_index, digest) = registry.get_manifest(&reference)?;
+    /// println!("Manifest digest: {}", digest);
     /// match manifest_or_index {
     ///     librex::ManifestOrIndex::Manifest(manifest) => {
     ///         println!("Single-platform image with {} layers", manifest.layers().len());
@@ -212,7 +213,7 @@ impl Registry {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn get_manifest(&mut self, reference: &Reference) -> Result<ManifestOrIndex> {
+    pub fn get_manifest(&mut self, reference: &Reference) -> Result<(ManifestOrIndex, String)> {
         // For digest references, we can cache by digest
         let cache_key = if let Some(digest) = reference.digest() {
             format!("{}/manifests/{}", reference.repository(), digest)
@@ -229,10 +230,27 @@ impl Registry {
         // Note: Both digest and tag references are cached, but with different TTLs
         // - Digest-based: Long TTL (immutable content)
         // - Tag-based: Shorter TTL via CacheType::Manifest (content can change)
+        // When loading from cache, we also need to reconstruct the digest
         if let Some(cache) = &mut self.cache
             && let Some(cached_bytes) = cache.get::<Vec<u8>>(&cache_key)?
         {
-            return ManifestOrIndex::from_bytes(&cached_bytes);
+            let manifest_or_index = ManifestOrIndex::from_bytes(&cached_bytes)?;
+
+            // If this was a digest-based reference, extract the digest from the reference
+            // Otherwise, we need to compute it from the cached bytes
+            let digest = if let Some(d) = reference.digest() {
+                d.to_string()
+            } else {
+                // Compute digest from cached bytes using sha256
+                // The Docker-Content-Digest is the sha256 hash of the exact bytes returned
+                use sha2::{Digest as Sha2Digest, Sha256};
+                let mut hasher = Sha256::new();
+                hasher.update(&cached_bytes);
+                let hash = hasher.finalize();
+                format!("sha256:{:x}", hash)
+            };
+
+            return Ok((manifest_or_index, digest));
         }
 
         // Fetch from registry - client returns (Vec<u8>, String) tuple
@@ -242,7 +260,7 @@ impl Registry {
             reference.tag().unwrap_or("latest")
         };
 
-        let (manifest_bytes, _digest) = self
+        let (manifest_bytes, digest) = self
             .client
             .fetch_manifest(reference.repository(), reference_str)?;
 
@@ -254,7 +272,7 @@ impl Registry {
             cache.set(&cache_key, &manifest_bytes, CacheType::Manifest)?;
         }
 
-        Ok(manifest_or_index)
+        Ok((manifest_or_index, digest))
     }
 
     /// Retrieves a blob (layer or config) by digest.

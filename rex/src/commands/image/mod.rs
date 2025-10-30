@@ -729,7 +729,7 @@ pub(crate) fn list_tags(
                 let reference = format!("{}:{}", image_name_str, tag);
 
                 match thread_rex.get_manifest(&reference) {
-                    Ok(manifest_or_index) => {
+                    Ok((manifest_or_index, digest)) => {
                         // Extract details based on manifest type
                         let (size, platforms, created) = match &manifest_or_index {
                             librex::oci::ManifestOrIndex::Manifest(manifest) => {
@@ -777,10 +777,7 @@ pub(crate) fn list_tags(
                             }
                         };
 
-                        // For now, use a placeholder digest since we can't easily get it from ManifestOrIndex
-                        // TODO: Enhance librex to return digest along with manifest
-                        let digest = "sha256:...".to_string();
-
+                        // Use the digest returned from the registry
                         let result =
                             Some(TagInfo::new(tag.clone(), digest, size, created, platforms));
 
@@ -882,7 +879,7 @@ pub(crate) fn get_image_details(
         .map_err(|e| format!("Invalid image reference: {}", e))?;
 
     // Get the manifest (Rex::get_manifest expects a string reference)
-    let manifest_or_index = rex
+    let (manifest_or_index, manifest_digest) = rex
         .get_manifest(reference_str)
         .map_err(|e| format!("Failed to fetch manifest: {}", e))?;
 
@@ -952,15 +949,10 @@ pub(crate) fn get_image_details(
         }
     };
 
-    // Get the digest - use the one from reference if available, otherwise we'd need to compute it
-    let digest = reference
-        .digest()
-        .map(|d| d.to_string())
-        .unwrap_or_else(|| "N/A".to_string());
-
+    // Use the manifest digest returned from the registry
     Ok(ImageDetails::new(
         reference_str.to_string(),
-        digest,
+        manifest_digest,
         manifest_type,
         size,
         platforms,
@@ -1016,7 +1008,7 @@ pub(crate) fn get_image_inspect(
         .map_err(|e| format!("Invalid image reference: {}", e))?;
 
     // Get the manifest
-    let manifest_or_index = rex
+    let (manifest_or_index, manifest_digest) = rex
         .get_manifest(reference_str)
         .map_err(|e| format!("Failed to fetch manifest: {}", e))?;
 
@@ -1141,12 +1133,7 @@ pub(crate) fn get_image_inspect(
         .map(|d| d.to_string())
         .collect();
 
-    // Get manifest digest
-    let manifest_digest = reference
-        .digest()
-        .map(|d| d.to_string())
-        .unwrap_or_else(|| "N/A".to_string());
-
+    // Use the manifest digest returned from the registry
     Ok(ImageInspect {
         reference: reference_str.to_string(),
         registry: registry_url.to_string(),

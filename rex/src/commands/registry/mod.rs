@@ -999,7 +999,9 @@ fn sync_single_registry(
                     for tag in &tags {
                         let reference = format!("{}:{}", repo, tag);
                         // Fetch manifest
-                        if let Ok(manifest_or_index) = thread_rex.get_manifest(&reference) {
+                        if let Ok((manifest_or_index, _digest)) =
+                            thread_rex.get_manifest(&reference)
+                        {
                             manifest_count += 1;
 
                             // Fetch config blob if this is a manifest (not an index)
