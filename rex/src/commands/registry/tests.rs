@@ -491,6 +491,8 @@ fn test_show_registry_with_default_marker() {
     let display = result.unwrap();
     assert_eq!(display.name, "local");
     assert_eq!(display.default, "*");
+    // Auth field should be empty string (no credentials configured)
+    assert_eq!(display.auth, "");
 }
 
 #[test]

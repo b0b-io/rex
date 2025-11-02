@@ -60,6 +60,8 @@ pub struct RegistryDisplay {
     pub url: String,
     #[tabled(rename = "DEFAULT")]
     pub default: String,
+    #[tabled(rename = "AUTH")]
+    pub auth: String,
 }
 
 /// Registry check result
@@ -292,6 +294,18 @@ pub(crate) fn show_registry(config_path: &PathBuf, name: &str) -> Result<Registr
         .find(|r| r.name == name)
         .ok_or_else(|| format!("Registry '{}' not found", name))?;
 
+    // Check if credentials are configured for this registry
+    let creds_path = config::get_credentials_path();
+    let authenticated = if creds_path.exists() {
+        if let Ok(store) = librex::auth::FileCredentialStore::new(creds_path) {
+            store.get(&registry.url).unwrap_or(None).is_some()
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
     // Create display with default marker
     let is_default = config.registries.default.as_ref() == Some(&name.to_string());
     Ok(RegistryDisplay {
@@ -302,6 +316,11 @@ pub(crate) fn show_registry(config_path: &PathBuf, name: &str) -> Result<Registr
         } else {
             String::new()
         },
+        auth: if authenticated {
+            "✓".to_string()
+        } else {
+            String::new()
+        },
     })
 }
 
@@ -309,18 +328,39 @@ pub(crate) fn show_registry(config_path: &PathBuf, name: &str) -> Result<Registr
 pub(crate) fn list_registries(config_path: &PathBuf) -> Result<Vec<RegistryDisplay>, String> {
     let config = config::Config::load(config_path)?;
 
-    // Create display list with default markers
+    // Load credential store once for all registries
+    let creds_path = config::get_credentials_path();
+    let cred_store = if creds_path.exists() {
+        librex::auth::FileCredentialStore::new(creds_path).ok()
+    } else {
+        None
+    };
+
+    // Create display list with default markers and auth status
     let registries: Vec<RegistryDisplay> = config
         .registries
         .list
         .iter()
         .map(|r| {
             let is_default = config.registries.default.as_ref() == Some(&r.name);
+
+            // Check if credentials exist for this registry
+            let authenticated = if let Some(ref store) = cred_store {
+                store.get(&r.url).unwrap_or(None).is_some()
+            } else {
+                false
+            };
+
             RegistryDisplay {
                 name: r.name.clone(),
                 url: r.url.clone(),
                 default: if is_default {
                     "*".to_string()
+                } else {
+                    String::new()
+                },
+                auth: if authenticated {
+                    "✓".to_string()
                 } else {
                     String::new()
                 },
