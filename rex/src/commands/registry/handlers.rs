@@ -105,8 +105,8 @@ pub fn handle_registry_list(ctx: &crate::context::AppContext, format: OutputForm
 
             match format {
                 OutputFormat::Pretty => {
-                    use tabled::Table;
-                    let table = Table::new(&registries).to_string();
+                    use tabled::{Table, settings::Style};
+                    let table = Table::new(&registries).with(Style::empty()).to_string();
                     println!("{}", table);
                 }
                 OutputFormat::Json => match serde_json::to_string_pretty(&registries) {

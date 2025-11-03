@@ -84,9 +84,10 @@ pub struct Output {
 }
 
 /// Enum for output formats.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputFormat {
+    #[default]
     Pretty,
 
     Json,
@@ -94,27 +95,16 @@ pub enum OutputFormat {
     Yaml,
 }
 
-impl Default for OutputFormat {
-    fn default() -> Self {
-        Self::Pretty
-    }
-}
-
 /// Enum for color output choices.
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ColorChoice {
+    #[default]
     Auto,
 
     Always,
 
     Never,
-}
-
-impl Default for ColorChoice {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 /// Network settings.
