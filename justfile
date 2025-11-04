@@ -39,6 +39,15 @@ test:
 test-verbose:
     cargo test -- --nocapture
 
+# Generate code coverage report (requires cargo-llvm-cov: cargo install cargo-llvm-cov)
+coverage:
+    cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+# Generate and open HTML coverage report
+coverage-html:
+    cargo llvm-cov --all-features --workspace --html
+    @echo "Coverage report generated in target/llvm-cov/html/index.html"
+
 # Run clippy for linting (use 'just lint fix' to auto-fix)
 lint fix="":
     #!/usr/bin/env bash
