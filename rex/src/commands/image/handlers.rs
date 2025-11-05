@@ -214,7 +214,7 @@ pub fn handle_image_inspect(
     ctx: &crate::context::AppContext,
     reference: &str,
     format: OutputFormat,
-    _platform: Option<&str>,
+    platform: Option<&str>,
     _raw_manifest: bool,
     _raw_config: bool,
 ) {
@@ -234,7 +234,7 @@ pub fn handle_image_inspect(
     };
 
     // Get full inspection details
-    let inspect = match get_image_inspect(&registry_url, reference) {
+    let inspect = match get_image_inspect(&registry_url, reference, platform) {
         Ok(inspect) => inspect,
         Err(e) => {
             format::error(ctx, &e);
@@ -243,7 +243,6 @@ pub fn handle_image_inspect(
     };
 
     // TODO: Implement --raw-manifest and --raw-config flags
-    // TODO: Implement --platform flag for multi-arch images
 
     // Format output
     match format {
