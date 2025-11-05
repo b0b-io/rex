@@ -967,6 +967,7 @@ pub(crate) fn get_image_details(
 ///
 /// * `registry_url` - URL of the registry to query
 /// * `reference_str` - Full image reference (e.g., "alpine:latest" or "alpine@sha256:...")
+/// * `platform` - Optional platform filter (e.g., "linux/amd64" or "linux/arm/v7")
 ///
 /// # Returns
 ///
@@ -974,6 +975,7 @@ pub(crate) fn get_image_details(
 pub(crate) fn get_image_inspect(
     registry_url: &str,
     reference_str: &str,
+    platform: Option<&str>,
 ) -> Result<ImageInspect, String> {
     // Get cache directory from config (per-registry subdirectory)
     let cache_dir = get_registry_cache_dir(registry_url)?;
@@ -1012,15 +1014,78 @@ pub(crate) fn get_image_inspect(
         .get_manifest(reference_str)
         .map_err(|e| format!("Failed to fetch manifest: {}", e))?;
 
-    // For now, we only support single-platform manifests for inspect
-    // TODO: Add support for --platform flag to select from multi-platform images
+    // Handle platform filtering for multi-platform images
     let manifest = match manifest_or_index {
         librex::oci::ManifestOrIndex::Manifest(m) => m,
-        librex::oci::ManifestOrIndex::Index(_) => {
-            return Err(
-                "Multi-platform images not yet supported for inspect. Use 'show' command or specify --platform flag."
-                    .to_string(),
-            );
+        librex::oci::ManifestOrIndex::Index(index) => {
+            // Multi-platform image - need platform specification
+            if let Some(platform_str) = platform {
+                // Parse the platform string
+                let (os, arch, _variant) = parse_platform(platform_str)?;
+
+                // Find the matching platform descriptor
+                let descriptor = index
+                    .manifests()
+                    .iter()
+                    .find(|desc| {
+                        desc.platform().as_ref().is_some_and(|p| {
+                            p.os().to_string() == os && p.architecture().to_string() == arch
+                        })
+                    })
+                    .ok_or_else(|| {
+                        // List available platforms for better error message
+                        let available: Vec<String> = index
+                            .manifests()
+                            .iter()
+                            .filter_map(|desc| {
+                                desc.platform()
+                                    .as_ref()
+                                    .map(|p| format!("{}/{}", p.os(), p.architecture()))
+                            })
+                            .collect();
+
+                        format!(
+                            "Platform '{}' not found in image. Available platforms: {}",
+                            platform_str,
+                            available.join(", ")
+                        )
+                    })?;
+
+                // Fetch the platform-specific manifest using its digest
+                let platform_digest = descriptor.digest().to_string();
+                let platform_ref = format!("{}@{}", reference.repository(), platform_digest);
+
+                // Fetch the platform-specific manifest
+                let (platform_manifest_or_index, _) = rex
+                    .get_manifest(&platform_ref)
+                    .map_err(|e| format!("Failed to fetch platform-specific manifest: {}", e))?;
+
+                // Extract the manifest (should be a single-platform manifest now)
+                match platform_manifest_or_index {
+                    librex::oci::ManifestOrIndex::Manifest(m) => m,
+                    librex::oci::ManifestOrIndex::Index(_) => {
+                        return Err(
+                            "Unexpected: platform-specific reference returned an index".to_string()
+                        );
+                    }
+                }
+            } else {
+                // No platform specified - list available platforms and error
+                let available: Vec<String> = index
+                    .manifests()
+                    .iter()
+                    .filter_map(|desc| {
+                        desc.platform()
+                            .as_ref()
+                            .map(|p| format!("{}/{}", p.os(), p.architecture()))
+                    })
+                    .collect();
+
+                return Err(format!(
+                    "Multi-platform image detected. Please specify a platform using --platform flag.\nAvailable platforms: {}",
+                    available.join(", ")
+                ));
+            }
         }
     };
 
@@ -1191,6 +1256,50 @@ pub(crate) fn get_registry_url() -> Result<String, String> {
 
     // Fall back to localhost:5000
     Ok("http://localhost:5000".to_string())
+}
+
+/// Parse a platform string into (os, architecture, variant) components.
+///
+/// # Format
+///
+/// Platform strings should be in the format:
+/// - `os/arch` (e.g., "linux/amd64")
+/// - `os/arch/variant` (e.g., "linux/arm/v7")
+///
+/// # Arguments
+///
+/// * `platform_str` - The platform string to parse
+///
+/// # Returns
+///
+/// Returns a tuple of (os, architecture, variant) where variant is Option<String>.
+///
+/// # Errors
+///
+/// Returns an error if the platform string format is invalid.
+pub(crate) fn parse_platform(
+    platform_str: &str,
+) -> Result<(String, String, Option<String>), String> {
+    let parts: Vec<&str> = platform_str.split('/').collect();
+
+    match parts.len() {
+        2 => {
+            // Format: os/arch
+            Ok((parts[0].to_string(), parts[1].to_string(), None))
+        }
+        3 => {
+            // Format: os/arch/variant
+            Ok((
+                parts[0].to_string(),
+                parts[1].to_string(),
+                Some(parts[2].to_string()),
+            ))
+        }
+        _ => Err(format!(
+            "Invalid platform format '{}'. Expected 'os/arch' or 'os/arch/variant'",
+            platform_str
+        )),
+    }
 }
 
 /// Get the cache directory for a specific registry

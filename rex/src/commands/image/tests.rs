@@ -334,3 +334,59 @@ fn test_image_details_byte_formatting() {
     let formatted = details_gb.format_pretty();
     assert!(formatted.contains("3.00 GB"));
 }
+
+#[test]
+fn test_parse_platform_os_arch() {
+    let result = parse_platform("linux/amd64");
+    assert!(result.is_ok());
+    let (os, arch, variant) = result.unwrap();
+    assert_eq!(os, "linux");
+    assert_eq!(arch, "amd64");
+    assert_eq!(variant, None);
+}
+
+#[test]
+fn test_parse_platform_os_arch_variant() {
+    let result = parse_platform("linux/arm/v7");
+    assert!(result.is_ok());
+    let (os, arch, variant) = result.unwrap();
+    assert_eq!(os, "linux");
+    assert_eq!(arch, "arm");
+    assert_eq!(variant, Some("v7".to_string()));
+}
+
+#[test]
+fn test_parse_platform_invalid_single_part() {
+    let result = parse_platform("linux");
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.contains("Invalid platform format"));
+    assert!(err.contains("os/arch"));
+}
+
+#[test]
+fn test_parse_platform_invalid_too_many_parts() {
+    let result = parse_platform("linux/arm/v7/extra");
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(err.contains("Invalid platform format"));
+}
+
+#[test]
+fn test_parse_platform_various_architectures() {
+    let test_cases = vec![
+        ("linux/arm64", "linux", "arm64", None),
+        ("windows/amd64", "windows", "amd64", None),
+        ("darwin/arm64", "darwin", "arm64", None),
+        ("linux/386", "linux", "386", None),
+    ];
+
+    for (input, expected_os, expected_arch, expected_variant) in test_cases {
+        let result = parse_platform(input);
+        assert!(result.is_ok(), "Failed to parse: {}", input);
+        let (os, arch, variant) = result.unwrap();
+        assert_eq!(os, expected_os);
+        assert_eq!(arch, expected_arch);
+        assert_eq!(variant, expected_variant);
+    }
+}
