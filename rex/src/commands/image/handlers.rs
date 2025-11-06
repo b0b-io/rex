@@ -215,8 +215,8 @@ pub fn handle_image_inspect(
     reference: &str,
     format: OutputFormat,
     platform: Option<&str>,
-    _raw_manifest: bool,
-    _raw_config: bool,
+    raw_manifest: bool,
+    raw_config: bool,
 ) {
     format::print(
         ctx,
@@ -234,15 +234,25 @@ pub fn handle_image_inspect(
     };
 
     // Get full inspection details
-    let inspect = match get_image_inspect(&registry_url, reference, platform) {
-        Ok(inspect) => inspect,
-        Err(e) => {
-            format::error(ctx, &e);
-            std::process::exit(1);
-        }
-    };
+    let inspect =
+        match get_image_inspect(&registry_url, reference, platform, raw_manifest, raw_config) {
+            Ok(inspect) => inspect,
+            Err(e) => {
+                format::error(ctx, &e);
+                std::process::exit(1);
+            }
+        };
 
-    // TODO: Implement --raw-manifest and --raw-config flags
+    // Handle raw output flags (these take precedence over format flags)
+    if raw_manifest && inspect.raw_manifest.is_some() {
+        println!("{}", inspect.raw_manifest.as_ref().unwrap());
+        return;
+    }
+
+    if raw_config && inspect.raw_config.is_some() {
+        println!("{}", inspect.raw_config.as_ref().unwrap());
+        return;
+    }
 
     // Format output
     match format {

@@ -10,7 +10,7 @@ fn test_get_image_inspect_invalid_reference() {
     let registry_url = server.url();
 
     // Call get_image_inspect with invalid reference
-    let result = get_image_inspect(&registry_url, "", None);
+    let result = get_image_inspect(&registry_url, "", None, false, false);
 
     assert!(result.is_err());
     let err_msg = result.unwrap_err();
@@ -38,7 +38,7 @@ fn test_get_image_inspect_manifest_not_found() {
         .create();
 
     // Call get_image_inspect
-    let result = get_image_inspect(&registry_url, "test/repo:nonexistent", None);
+    let result = get_image_inspect(&registry_url, "test/repo:nonexistent", None, false, false);
 
     assert!(result.is_err());
     let err_msg = result.unwrap_err();
@@ -133,7 +133,7 @@ fn test_get_image_inspect_single_platform() {
 
     // Mock manifest fetch
     let _manifest_mock = server
-        .mock("GET", "/v2/test/repo/manifests/latest")
+        .mock("GET", "/v2/test-single/repo/manifests/latest")
         .with_status(200)
         .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
         .with_header(
@@ -147,7 +147,7 @@ fn test_get_image_inspect_single_platform() {
     let _config_mock = server
         .mock(
             "GET",
-            "/v2/test/repo/blobs/sha256:05d6eacdcaf34accb9bfcc28ce285c4aee9844550f36890488468f9bcceebd76",
+            "/v2/test-single/repo/blobs/sha256:05d6eacdcaf34accb9bfcc28ce285c4aee9844550f36890488468f9bcceebd76",
         )
         .with_status(200)
         .with_header("content-type", "application/vnd.oci.image.config.v1+json")
@@ -155,13 +155,13 @@ fn test_get_image_inspect_single_platform() {
         .create();
 
     // Call get_image_inspect
-    let result = get_image_inspect(&registry_url, "test/repo:latest", None);
+    let result = get_image_inspect(&registry_url, "test-single/repo:latest", None, false, false);
 
     assert!(result.is_ok(), "Expected Ok, got: {:?}", result.err());
     let inspect = result.unwrap();
 
     // Verify basic fields
-    assert_eq!(inspect.reference, "test/repo:latest");
+    assert_eq!(inspect.reference, "test-single/repo:latest");
     assert_eq!(inspect.registry, registry_url);
     assert_eq!(inspect.architecture, "amd64");
     assert_eq!(inspect.os, "linux");
@@ -286,7 +286,7 @@ fn test_get_image_inspect_multi_platform_no_flag() {
 
     // Mock index fetch
     let _index_mock = server
-        .mock("GET", "/v2/test/repo/manifests/latest")
+        .mock("GET", "/v2/test-multi-no-flag/repo/manifests/latest")
         .with_status(200)
         .with_header("content-type", "application/vnd.oci.image.index.v1+json")
         .with_header(
@@ -297,7 +297,13 @@ fn test_get_image_inspect_multi_platform_no_flag() {
         .create();
 
     // Call get_image_inspect without platform flag
-    let result = get_image_inspect(&registry_url, "test/repo:latest", None);
+    let result = get_image_inspect(
+        &registry_url,
+        "test-multi-no-flag/repo:latest",
+        None,
+        false,
+        false,
+    );
 
     // Should error with helpful message listing available platforms
     assert!(result.is_err());
@@ -392,7 +398,7 @@ fn test_get_image_inspect_multi_platform_with_valid_flag() {
 
     // Mock index fetch
     let _index_mock = server
-        .mock("GET", "/v2/test/repo/manifests/latest")
+        .mock("GET", "/v2/test-multi-flag/repo/manifests/latest")
         .with_status(200)
         .with_header("content-type", "application/vnd.oci.image.index.v1+json")
         .with_header(
@@ -406,7 +412,7 @@ fn test_get_image_inspect_multi_platform_with_valid_flag() {
     let _manifest_mock = server
         .mock(
             "GET",
-            "/v2/test/repo/manifests/sha256:bbbb1234567890abcdef1234567890abcdef1234567890abcdef123456789012",
+            "/v2/test-multi-flag/repo/manifests/sha256:bbbb1234567890abcdef1234567890abcdef1234567890abcdef123456789012",
         )
         .with_status(200)
         .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
@@ -421,7 +427,7 @@ fn test_get_image_inspect_multi_platform_with_valid_flag() {
     let _config_mock = server
         .mock(
             "GET",
-            "/v2/test/repo/blobs/sha256:38850cc6cf9d25df7c4450466dd2b52a73d7c0434a9945fe573e9f798b8f6ab6",
+            "/v2/test-multi-flag/repo/blobs/sha256:38850cc6cf9d25df7c4450466dd2b52a73d7c0434a9945fe573e9f798b8f6ab6",
         )
         .with_status(200)
         .with_header("content-type", "application/vnd.oci.image.config.v1+json")
@@ -429,7 +435,13 @@ fn test_get_image_inspect_multi_platform_with_valid_flag() {
         .create();
 
     // Call get_image_inspect with platform flag
-    let result = get_image_inspect(&registry_url, "test/repo:latest", Some("linux/arm64"));
+    let result = get_image_inspect(
+        &registry_url,
+        "test-multi-flag/repo:latest",
+        Some("linux/arm64"),
+        false,
+        false,
+    );
 
     assert!(result.is_ok(), "Expected Ok, got: {:?}", result.err());
     let inspect = result.unwrap();
@@ -483,7 +495,7 @@ fn test_get_image_inspect_multi_platform_invalid_platform() {
 
     // Mock index fetch
     let _index_mock = server
-        .mock("GET", "/v2/test/repo/manifests/latest")
+        .mock("GET", "/v2/test-multi-invalid/repo/manifests/latest")
         .with_status(200)
         .with_header("content-type", "application/vnd.oci.image.index.v1+json")
         .with_header(
@@ -494,7 +506,13 @@ fn test_get_image_inspect_multi_platform_invalid_platform() {
         .create();
 
     // Call get_image_inspect with invalid platform
-    let result = get_image_inspect(&registry_url, "test/repo:latest", Some("linux/s390x"));
+    let result = get_image_inspect(
+        &registry_url,
+        "test-multi-invalid/repo:latest",
+        Some("linux/s390x"),
+        false,
+        false,
+    );
 
     // Should error with helpful message listing available platforms
     assert!(result.is_err());
@@ -503,4 +521,285 @@ fn test_get_image_inspect_multi_platform_invalid_platform() {
     assert!(err_msg.contains("Available platforms"));
     assert!(err_msg.contains("linux/amd64"));
     assert!(err_msg.contains("linux/arm64"));
+}
+
+// Test raw manifest flag returns JSON
+#[allow(dead_code)]
+#[test]
+fn test_get_image_inspect_raw_manifest() {
+    let mut server = mockito::Server::new();
+    let registry_url = server.url();
+
+    // Mock version check
+    let _v2_mock = server
+        .mock("GET", "/v2/")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body("{}")
+        .create();
+
+    // Create a minimal OCI manifest
+    let manifest_json = r#"{
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "config": {
+        "mediaType": "application/vnd.oci.image.config.v1+json",
+        "size": 265,
+        "digest": "sha256:25890cdad8e8e7bdea614016480bb7dda663c418d23a4ae997b53ed17a022c85"
+    },
+    "layers": [
+        {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "size": 32654,
+            "digest": "sha256:9834876dcfb05cb167a5c24953eba58c4ac89b1adf57f28f2f9d09af107ee8f0"
+        }
+    ]
+}"#;
+
+    // Create a minimal OCI image config
+    let config_json = r#"{
+        "architecture": "amd64",
+        "os": "linux",
+        "created": "2023-01-01T00:00:00Z",
+        "config": {},
+        "rootfs": {
+            "type": "layers",
+            "diff_ids": [
+                "sha256:diff1111111111111111111111111111111111111111111111111111111111111"
+            ]
+        }
+    }"#;
+
+    // Mock manifest fetch
+    let _manifest_mock = server
+        .mock("GET", "/v2/test-raw-manifest/repo/manifests/latest")
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+        .with_header(
+            "docker-content-digest",
+            "sha256:manifestdigest1111111111111111111111111111111111111111111111111",
+        )
+        .with_body(manifest_json)
+        .create();
+
+    // Mock config blob fetch
+    let _config_mock = server
+        .mock(
+            "GET",
+            "/v2/test-raw-manifest/repo/blobs/sha256:25890cdad8e8e7bdea614016480bb7dda663c418d23a4ae997b53ed17a022c85",
+        )
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.config.v1+json")
+        .with_body(config_json)
+        .create();
+
+    // Call get_image_inspect with raw_manifest=true
+    let result = get_image_inspect(
+        &registry_url,
+        "test-raw-manifest/repo:latest",
+        None,
+        true,
+        false,
+    );
+
+    assert!(result.is_ok(), "Expected Ok, got: {:?}", result.err());
+    let inspect = result.unwrap();
+
+    // Verify raw_manifest is populated
+    assert!(inspect.raw_manifest.is_some());
+    let raw_manifest = inspect.raw_manifest.unwrap();
+
+    // Verify it's valid JSON and contains expected fields
+    assert!(raw_manifest.contains("schemaVersion"));
+    assert!(raw_manifest.contains("\"config\""));
+    assert!(raw_manifest.contains("\"layers\""));
+    assert!(
+        raw_manifest
+            .contains("sha256:25890cdad8e8e7bdea614016480bb7dda663c418d23a4ae997b53ed17a022c85")
+    );
+
+    // Verify raw_config is NOT populated
+    assert!(inspect.raw_config.is_none());
+}
+
+// Test raw config flag returns JSON
+#[allow(dead_code)]
+#[test]
+fn test_get_image_inspect_raw_config() {
+    let mut server = mockito::Server::new();
+    let registry_url = server.url();
+
+    // Mock version check
+    let _v2_mock = server
+        .mock("GET", "/v2/")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body("{}")
+        .create();
+
+    // Create a minimal OCI manifest
+    let manifest_json = r#"{
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "config": {
+        "mediaType": "application/vnd.oci.image.config.v1+json",
+        "size": 289,
+        "digest": "sha256:0af3a19ed6ae2afc5f87f1a90ec80092b46491b497ce4d0570193c3f0f694b8d"
+    },
+    "layers": [
+        {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "size": 32654,
+            "digest": "sha256:9834876dcfb05cb167a5c24953eba58c4ac89b1adf57f28f2f9d09af107ee8f0"
+        }
+    ]
+}"#;
+
+    // Create a minimal OCI image config
+    let config_json = r#"{
+        "architecture": "amd64",
+        "os": "linux",
+        "created": "2023-01-01T00:00:00Z",
+        "config": {
+            "Env": ["PATH=/usr/bin"],
+            "Cmd": ["/bin/sh"]
+        },
+        "rootfs": {
+            "type": "layers",
+            "diff_ids": [
+                "sha256:diff1111111111111111111111111111111111111111111111111111111111111"
+            ]
+        }
+    }"#;
+
+    // Mock manifest fetch
+    let _manifest_mock = server
+        .mock("GET", "/v2/test-raw-config/repo/manifests/latest")
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+        .with_header(
+            "docker-content-digest",
+            "sha256:manifestdigest1111111111111111111111111111111111111111111111111",
+        )
+        .with_body(manifest_json)
+        .create();
+
+    // Mock config blob fetch
+    let _config_mock = server
+        .mock(
+            "GET",
+            "/v2/test-raw-config/repo/blobs/sha256:0af3a19ed6ae2afc5f87f1a90ec80092b46491b497ce4d0570193c3f0f694b8d",
+        )
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.config.v1+json")
+        .with_body(config_json)
+        .create();
+
+    // Call get_image_inspect with raw_config=true
+    let result = get_image_inspect(
+        &registry_url,
+        "test-raw-config/repo:latest",
+        None,
+        false,
+        true,
+    );
+
+    assert!(result.is_ok(), "Expected Ok, got: {:?}", result.err());
+    let inspect = result.unwrap();
+
+    // Verify raw_config is populated
+    assert!(inspect.raw_config.is_some());
+    let raw_config = inspect.raw_config.unwrap();
+
+    // Verify it's valid JSON and contains expected fields
+    assert!(raw_config.contains("\"architecture\""));
+    assert!(raw_config.contains("\"amd64\""));
+    assert!(raw_config.contains("\"os\""));
+    assert!(raw_config.contains("\"linux\""));
+    assert!(raw_config.contains("\"rootfs\""));
+    assert!(raw_config.contains("\"config\""));
+
+    // Verify raw_manifest is NOT populated
+    assert!(inspect.raw_manifest.is_none());
+}
+
+// Test both raw flags together
+#[allow(dead_code)]
+#[test]
+fn test_get_image_inspect_both_raw_flags() {
+    let mut server = mockito::Server::new();
+    let registry_url = server.url();
+
+    // Mock version check
+    let _v2_mock = server
+        .mock("GET", "/v2/")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body("{}")
+        .create();
+
+    // Create a minimal OCI manifest
+    let manifest_json = r#"{
+    "schemaVersion": 2,
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "config": {
+        "mediaType": "application/vnd.oci.image.config.v1+json",
+        "size": 265,
+        "digest": "sha256:25890cdad8e8e7bdea614016480bb7dda663c418d23a4ae997b53ed17a022c85"
+    },
+    "layers": [
+        {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "size": 32654,
+            "digest": "sha256:9834876dcfb05cb167a5c24953eba58c4ac89b1adf57f28f2f9d09af107ee8f0"
+        }
+    ]
+}"#;
+
+    // Create a minimal OCI image config
+    let config_json = r#"{
+        "architecture": "amd64",
+        "os": "linux",
+        "created": "2023-01-01T00:00:00Z",
+        "config": {},
+        "rootfs": {
+            "type": "layers",
+            "diff_ids": [
+                "sha256:diff1111111111111111111111111111111111111111111111111111111111111"
+            ]
+        }
+    }"#;
+
+    // Mock manifest fetch
+    let _manifest_mock = server
+        .mock("GET", "/v2/test-both-raw/repo/manifests/latest")
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+        .with_header(
+            "docker-content-digest",
+            "sha256:manifestdigest1111111111111111111111111111111111111111111111111",
+        )
+        .with_body(manifest_json)
+        .create();
+
+    // Mock config blob fetch
+    let _config_mock = server
+        .mock(
+            "GET",
+            "/v2/test-both-raw/repo/blobs/sha256:25890cdad8e8e7bdea614016480bb7dda663c418d23a4ae997b53ed17a022c85",
+        )
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.config.v1+json")
+        .with_body(config_json)
+        .create();
+
+    // Call get_image_inspect with both raw flags
+    let result = get_image_inspect(&registry_url, "test-both-raw/repo:latest", None, true, true);
+
+    assert!(result.is_ok(), "Expected Ok, got: {:?}", result.err());
+    let inspect = result.unwrap();
+
+    // Verify both raw fields are populated
+    assert!(inspect.raw_manifest.is_some());
+    assert!(inspect.raw_config.is_some());
 }
