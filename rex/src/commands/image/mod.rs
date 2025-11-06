@@ -275,6 +275,12 @@ pub struct ImageInspect {
     pub history: Vec<HistoryEntry>,
     /// RootFS diff IDs
     pub rootfs_diff_ids: Vec<String>,
+    /// Raw manifest JSON (only populated when requested)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_manifest: Option<String>,
+    /// Raw config JSON (only populated when requested)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_config: Option<String>,
 }
 
 impl Formattable for ImageInspect {
@@ -968,6 +974,8 @@ pub(crate) fn get_image_details(
 /// * `registry_url` - URL of the registry to query
 /// * `reference_str` - Full image reference (e.g., "alpine:latest" or "alpine@sha256:...")
 /// * `platform` - Optional platform filter (e.g., "linux/amd64" or "linux/arm/v7")
+/// * `raw_manifest` - If true, include raw manifest JSON in the response
+/// * `raw_config` - If true, include raw config JSON in the response
 ///
 /// # Returns
 ///
@@ -976,6 +984,8 @@ pub(crate) fn get_image_inspect(
     registry_url: &str,
     reference_str: &str,
     platform: Option<&str>,
+    raw_manifest: bool,
+    raw_config: bool,
 ) -> Result<ImageInspect, String> {
     // Get cache directory from config (per-registry subdirectory)
     let cache_dir = get_registry_cache_dir(registry_url)?;
@@ -1198,6 +1208,26 @@ pub(crate) fn get_image_inspect(
         .map(|d| d.to_string())
         .collect();
 
+    // Optionally serialize raw manifest JSON
+    let raw_manifest_json = if raw_manifest {
+        Some(
+            serde_json::to_string_pretty(&manifest)
+                .map_err(|e| format!("Failed to serialize manifest: {}", e))?,
+        )
+    } else {
+        None
+    };
+
+    // Optionally serialize raw config JSON
+    let raw_config_json = if raw_config {
+        Some(
+            serde_json::to_string_pretty(&config)
+                .map_err(|e| format!("Failed to serialize config: {}", e))?,
+        )
+    } else {
+        None
+    };
+
     // Use the manifest digest returned from the registry
     Ok(ImageInspect {
         reference: reference_str.to_string(),
@@ -1220,6 +1250,8 @@ pub(crate) fn get_image_inspect(
         layers,
         history,
         rootfs_diff_ids,
+        raw_manifest: raw_manifest_json,
+        raw_config: raw_config_json,
     })
 }
 
