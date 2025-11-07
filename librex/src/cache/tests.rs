@@ -163,7 +163,7 @@ fn test_cache_clear() {
         .unwrap();
 
     // Verify entries exist
-    assert!(cache.memory.len() > 0);
+    assert!(!cache.memory.is_empty());
     let key1_path = cache.key_to_path("key1").unwrap();
     let key2_path = cache.key_to_path("key2").unwrap();
     let key3_path = cache.key_to_path("key3").unwrap();

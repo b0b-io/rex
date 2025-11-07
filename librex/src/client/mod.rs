@@ -700,6 +700,118 @@ impl Client {
         Ok(blob_bytes.to_vec())
     }
 
+    /// Deletes a manifest from the registry by digest.
+    ///
+    /// This method performs a DELETE request to the `/v2/<name>/manifests/<digest>` endpoint.
+    /// According to the OCI Distribution Specification, manifests can only be deleted by digest,
+    /// not by tag. To delete a tag, you must first resolve it to a digest using `fetch_manifest`.
+    ///
+    /// **Important**: Not all registries support manifest deletion. The registry must be configured
+    /// to allow DELETE operations. If deletion is not enabled, this method will return an error
+    /// with status 405 (Method Not Allowed).
+    ///
+    /// # Arguments
+    ///
+    /// * `repository` - The name of the repository
+    /// * `digest` - The manifest digest to delete (must be a digest, not a tag)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use librex::client::Client;
+    ///
+    /// # fn example() -> librex::error::Result<()> {
+    /// let client = Client::new("http://localhost:5000", None)?;
+    ///
+    /// // First, get the digest for a tag
+    /// let (_, digest) = client.fetch_manifest("alpine", "latest")?;
+    ///
+    /// // Then delete using the digest
+    /// client.delete_manifest("alpine", &digest)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the manifest was successfully deleted (HTTP 202 or 204).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The registry is unreachable
+    /// - The manifest does not exist (404)
+    /// - Authentication is required but not provided (401)
+    /// - The operation is forbidden (403)
+    /// - Deletion is not enabled on the registry (405)
+    /// - The digest format is invalid
+    pub fn delete_manifest(&self, repository: &str, digest: &str) -> Result<()> {
+        let url = format!(
+            "{}/v2/{}/manifests/{}",
+            self.registry_url, repository, digest
+        );
+
+        let mut request = self.http_client.delete(&url);
+
+        // Add Authorization header if credentials are present
+        if let Some(ref creds) = self.credentials
+            && let Some(auth_header) = creds.to_header_value()
+        {
+            request = request.header("Authorization", auth_header);
+        }
+
+        let response = request
+            .send()
+            .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;
+
+        let status = response.status();
+
+        // Handle successful deletion
+        if status == StatusCode::ACCEPTED || status == StatusCode::NO_CONTENT {
+            return Ok(());
+        }
+
+        // Handle error cases
+        let url_str = response.url().to_string();
+        let error_body = response
+            .text()
+            .unwrap_or_else(|_| String::from("(unable to read response body)"));
+
+        match status {
+            StatusCode::NOT_FOUND => Err(RexError::not_found(
+                "manifest",
+                &format!("{} in {}", digest, repository),
+            )),
+            StatusCode::UNAUTHORIZED => Err(RexError::authentication(
+                format!("Authentication required to delete manifest: {}", error_body),
+                Some(401),
+            )),
+            StatusCode::FORBIDDEN => Err(RexError::authentication(
+                format!("Permission denied to delete manifest: {}", error_body),
+                Some(403),
+            )),
+            StatusCode::METHOD_NOT_ALLOWED => Err(RexError::validation(
+                "Manifest deletion is not enabled on this registry. \
+                 Check registry configuration (e.g., Zot requires 'storage.gc: true' and \
+                 'http.allowDelete: true')"
+                    .to_string(),
+            )),
+            StatusCode::INTERNAL_SERVER_ERROR
+            | StatusCode::BAD_GATEWAY
+            | StatusCode::SERVICE_UNAVAILABLE
+            | StatusCode::GATEWAY_TIMEOUT => Err(RexError::server(
+                format!("Server error while deleting manifest: {}", error_body),
+                status.as_u16(),
+            )),
+            _ => Err(RexError::network(format!(
+                "Failed to delete manifest: HTTP {} from {}: {}",
+                status.as_u16(),
+                url_str,
+                error_body
+            ))),
+        }
+    }
+
     /// Extracts the next page URL from the Link header.
     ///
     /// The OCI Distribution Specification uses the Link header for pagination:

@@ -276,6 +276,160 @@ pub fn handle_image_inspect(
     }
 }
 
+/// Handle the image remove command
+pub fn handle_image_remove(ctx: &crate::context::AppContext, reference: &str, force: bool) {
+    // Parse the reference to determine if it's a single tag or all tags
+    let has_tag = reference.contains(':') || reference.contains('@');
+
+    // Get registry URL
+    let registry_url = match get_registry_url() {
+        Ok(url) => url,
+        Err(e) => {
+            format::error(ctx, &e);
+            std::process::exit(1);
+        }
+    };
+
+    // Build Rex instance
+    let cache_dir = match get_registry_cache_dir(&registry_url) {
+        Ok(dir) => dir,
+        Err(e) => {
+            format::error(ctx, &e);
+            std::process::exit(1);
+        }
+    };
+
+    let creds_path = config::get_credentials_path();
+    let credentials = if creds_path.exists() {
+        if let Ok(store) = librex::auth::FileCredentialStore::new(creds_path) {
+            store.get(&registry_url).ok().flatten()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let mut builder = librex::Rex::builder()
+        .registry_url(&registry_url)
+        .with_cache(cache_dir);
+
+    if let Some(ref creds) = credentials {
+        builder = builder.with_credentials(creds.clone());
+    }
+
+    let mut rex = match builder.build() {
+        Ok(r) => r,
+        Err(e) => {
+            format::error(ctx, &format!("Failed to connect to registry: {}", e));
+            std::process::exit(1);
+        }
+    };
+
+    if has_tag {
+        // Single tag deletion
+        if !force {
+            // Prompt for confirmation
+            print!("Delete image '{}'? [y/N]: ", reference);
+            use std::io::{self, Write};
+            io::stdout().flush().unwrap();
+
+            let mut input = String::new();
+            io::stdin().read_line(&mut input).unwrap();
+
+            if !input.trim().eq_ignore_ascii_case("y") {
+                println!("Aborted.");
+                return;
+            }
+        }
+
+        format::print(
+            ctx,
+            VerbosityLevel::Verbose,
+            &format!("Deleting image '{}'...", reference),
+        );
+
+        match rex.delete_tag(reference) {
+            Ok(()) => {
+                format::success(ctx, &format!("Deleted image '{}'", reference));
+            }
+            Err(e) => {
+                format::error(ctx, &format!("Failed to delete image: {}", e));
+                std::process::exit(1);
+            }
+        }
+    } else {
+        // All tags deletion
+        let repo = reference;
+
+        // First, list tags to show what will be deleted
+        format::print(
+            ctx,
+            VerbosityLevel::Verbose,
+            &format!("Listing tags for repository '{}'...", repo),
+        );
+
+        let tags = match rex.list_tags(repo) {
+            Ok(t) => t,
+            Err(e) => {
+                format::error(ctx, &format!("Failed to list tags: {}", e));
+                std::process::exit(1);
+            }
+        };
+
+        if tags.is_empty() {
+            println!("No tags found for repository '{}'.", repo);
+            return;
+        }
+
+        if !force {
+            // Show what will be deleted and confirm
+            println!("The following tags will be deleted from '{}':", repo);
+            for tag in &tags {
+                println!("  - {}", tag);
+            }
+            print!("\nDelete {} tags? [y/N]: ", tags.len());
+
+            use std::io::{self, Write};
+            io::stdout().flush().unwrap();
+
+            let mut input = String::new();
+            io::stdin().read_line(&mut input).unwrap();
+
+            if !input.trim().eq_ignore_ascii_case("y") {
+                println!("Aborted.");
+                return;
+            }
+        }
+
+        format::print(
+            ctx,
+            VerbosityLevel::Verbose,
+            &format!("Deleting {} tags from '{}'...", tags.len(), repo),
+        );
+
+        match rex.delete_all_tags(repo) {
+            Ok(deleted) => {
+                format::success(
+                    ctx,
+                    &format!("Deleted {} tags from '{}'", deleted.len(), repo),
+                );
+
+                // Show deleted tags in verbose mode
+                if ctx.verbosity >= VerbosityLevel::Verbose {
+                    for tag in deleted {
+                        println!("  ✓ {}", tag);
+                    }
+                }
+            }
+            Err(e) => {
+                format::error(ctx, &format!("Failed to delete tags: {}", e));
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 #[path = "handlers_tests.rs"]
 mod tests;
