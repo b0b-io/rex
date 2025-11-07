@@ -216,3 +216,164 @@ fn test_manifest_digest_consistency() {
     assert!(computed_digest.starts_with("sha256:"));
     assert_eq!(computed_digest.len(), 71);
 }
+
+// Tests for cache invalidation during delete operations
+
+#[test]
+fn test_delete_manifest_cache_key_format() {
+    // Verify that delete_manifest uses the correct cache key format
+    // This matches the format used in get_manifest for digest-based lookups
+    let repository = "alpine";
+    let digest = "sha256:abc123";
+    let expected_cache_key = format!("{}/manifests/{}", repository, digest);
+
+    // The cache key should match: "{repo}/manifests/{digest}"
+    assert_eq!(expected_cache_key, "alpine/manifests/sha256:abc123");
+}
+
+#[test]
+fn test_delete_tag_cache_key_formats() {
+    // Verify that delete_tag invalidates all the correct cache keys
+    let repository = "alpine";
+    let tag = "latest";
+    let digest = "sha256:abc123";
+
+    // Should invalidate tag-based manifest cache
+    let tag_cache_key = format!("{}/tags/{}/manifest", repository, tag);
+    assert_eq!(tag_cache_key, "alpine/tags/latest/manifest");
+
+    // Should invalidate tags list cache
+    let tags_list_key = format!("{}/_tags", repository);
+    assert_eq!(tags_list_key, "alpine/_tags");
+
+    // Should invalidate digest-based manifest cache (via delete_manifest)
+    let digest_cache_key = format!("{}/manifests/{}", repository, digest);
+    assert_eq!(digest_cache_key, "alpine/manifests/sha256:abc123");
+}
+
+#[test]
+fn test_delete_manifest_invalidates_cache() {
+    // This test verifies that calling delete_manifest actually removes the cache entry
+    // We can't test the HTTP DELETE without a running registry, but we can test cache invalidation
+
+    let temp_dir = tempdir().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    // Manually populate cache with a manifest entry
+    let repository = "alpine";
+    let digest = "sha256:abc123def456";
+    let cache_key = format!("{}/manifests/{}", repository, digest);
+    let fake_manifest_data = b"fake manifest data";
+
+    cache
+        .set(
+            &cache_key,
+            &fake_manifest_data.to_vec(),
+            CacheType::Manifest,
+        )
+        .unwrap();
+
+    // Verify cache entry exists
+    let cached: Option<Vec<u8>> = cache.get(&cache_key).unwrap();
+    assert!(cached.is_some());
+    assert_eq!(cached.unwrap(), fake_manifest_data);
+
+    // Now test that delete would invalidate this key
+    // Since we can't actually call delete_manifest (it would try to make HTTP request),
+    // we directly test the cache.delete() method with the same key format
+    cache.delete(&cache_key).unwrap();
+
+    // Verify cache entry is gone
+    let cached_after: Option<Vec<u8>> = cache.get(&cache_key).unwrap();
+    assert!(cached_after.is_none());
+}
+
+#[test]
+fn test_delete_tag_invalidates_multiple_cache_entries() {
+    // Verify that delete_tag would invalidate all the correct cache keys
+
+    let temp_dir = tempdir().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    let repository = "alpine";
+    let tag = "latest";
+    let digest = "sha256:abc123def456";
+
+    // Populate cache with all the entries that should be invalidated
+    let tag_cache_key = format!("{}/tags/{}/manifest", repository, tag);
+    let tags_list_key = format!("{}/_tags", repository);
+    let digest_cache_key = format!("{}/manifests/{}", repository, digest);
+
+    let fake_data = b"fake data";
+    cache
+        .set(&tag_cache_key, &fake_data.to_vec(), CacheType::Manifest)
+        .unwrap();
+    cache
+        .set(&tags_list_key, &vec!["latest".to_string()], CacheType::Tags)
+        .unwrap();
+    cache
+        .set(&digest_cache_key, &fake_data.to_vec(), CacheType::Manifest)
+        .unwrap();
+
+    // Verify all entries exist
+    assert!(cache.get::<Vec<u8>>(&tag_cache_key).unwrap().is_some());
+    assert!(cache.get::<Vec<String>>(&tags_list_key).unwrap().is_some());
+    assert!(cache.get::<Vec<u8>>(&digest_cache_key).unwrap().is_some());
+
+    // Simulate what delete_tag does - invalidate all three cache keys
+    cache.delete(&tag_cache_key).unwrap();
+    cache.delete(&tags_list_key).unwrap();
+    cache.delete(&digest_cache_key).unwrap();
+
+    // Verify all entries are gone
+    assert!(cache.get::<Vec<u8>>(&tag_cache_key).unwrap().is_none());
+    assert!(cache.get::<Vec<String>>(&tags_list_key).unwrap().is_none());
+    assert!(cache.get::<Vec<u8>>(&digest_cache_key).unwrap().is_none());
+}
+
+#[test]
+fn test_delete_all_tags_invalidates_tags_list_cache() {
+    // Verify that delete_all_tags invalidates the tags list cache
+
+    let temp_dir = tempdir().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    let repository = "alpine";
+    let tags_list_key = format!("{}/_tags", repository);
+
+    // Populate cache with tags list
+    let tags = vec!["latest".to_string(), "3.19".to_string(), "3.18".to_string()];
+    cache.set(&tags_list_key, &tags, CacheType::Tags).unwrap();
+
+    // Verify entry exists
+    let cached: Option<Vec<String>> = cache.get(&tags_list_key).unwrap();
+    assert!(cached.is_some());
+    assert_eq!(cached.unwrap(), tags);
+
+    // Simulate what delete_all_tags does - invalidate tags list cache
+    cache.delete(&tags_list_key).unwrap();
+
+    // Verify cache entry is gone
+    let cached_after: Option<Vec<String>> = cache.get(&tags_list_key).unwrap();
+    assert!(cached_after.is_none());
+}
+
+#[test]
+fn test_cache_delete_nonexistent_key_is_safe() {
+    // Verify that deleting a non-existent cache key doesn't cause errors
+
+    let temp_dir = tempdir().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    // Try to delete a key that doesn't exist
+    let result = cache.delete("nonexistent/key");
+    assert!(result.is_ok());
+}

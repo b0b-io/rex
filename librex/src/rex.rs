@@ -48,6 +48,7 @@ use crate::search::{SearchResult, search_images, search_repositories, search_tag
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 /// High-level interface for interacting with OCI registries.
 ///
@@ -582,6 +583,107 @@ impl Rex {
     /// Get the registry URL.
     pub fn registry_url(&self) -> &str {
         &self.registry_url
+    }
+
+    /// Delete a specific image tag.
+    ///
+    /// This resolves the reference to a digest and deletes the manifest from the registry.
+    /// According to the OCI Distribution Specification, manifests can only be deleted by
+    /// digest, so this method automatically handles tag-to-digest resolution.
+    ///
+    /// **Important**: Not all registries support manifest deletion. Check the registry
+    /// configuration before attempting to delete images.
+    ///
+    /// # Arguments
+    ///
+    /// * `reference` - Image reference (name:tag or name@digest)
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use librex::Rex;
+    ///
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
+    ///
+    ///     // Delete by tag
+    ///     rex.delete_tag("alpine:latest")?;
+    ///
+    ///     // Delete by digest
+    ///     rex.delete_tag("alpine@sha256:abc123...")?;
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The reference format is invalid
+    /// - The image does not exist
+    /// - Authentication is required but not provided
+    /// - The registry does not support deletion (405 Method Not Allowed)
+    /// - Network or server errors occur
+    pub fn delete_tag(&mut self, reference: &str) -> Result<()> {
+        let ref_parsed = Reference::from_str(reference)?;
+
+        if let Some(tag) = ref_parsed.tag() {
+            self.registry.delete_tag(ref_parsed.repository(), tag)
+        } else if let Some(digest) = ref_parsed.digest() {
+            let digest_str = digest.to_string();
+            self.registry
+                .delete_manifest(ref_parsed.repository(), &digest_str)
+        } else {
+            use crate::error::RexError;
+            Err(RexError::validation(
+                "Reference must include a tag or digest".to_string(),
+            ))
+        }
+    }
+
+    /// Delete all tags for a repository.
+    ///
+    /// This method lists all tags for the repository and deletes them one by one.
+    /// If some deletions fail, it continues with the remaining tags and returns
+    /// the list of successfully deleted tags.
+    ///
+    /// **Warning**: This is a destructive operation that removes all tags from
+    /// the repository. Use with caution!
+    ///
+    /// # Arguments
+    ///
+    /// * `repository` - Repository name (without tag)
+    ///
+    /// # Returns
+    ///
+    /// A vector of successfully deleted tag names.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use librex::Rex;
+    ///
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let mut rex = Rex::connect("http://localhost:5000")?;
+    ///
+    ///     let deleted = rex.delete_all_tags("alpine")?;
+    ///     println!("Deleted {} tags", deleted.len());
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Failed to list tags
+    /// - All deletion attempts failed
+    /// - Authentication is required but not provided
+    /// - The registry does not support deletion
+    pub fn delete_all_tags(&mut self, repository: &str) -> Result<Vec<String>> {
+        self.registry.delete_all_tags(repository)
     }
 }
 

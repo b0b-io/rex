@@ -194,6 +194,35 @@ impl Cache {
         Ok(())
     }
 
+    /// Deletes a specific entry from the cache (both L1 and L2).
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The cache key to delete
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` regardless of whether the key existed in the cache.
+    /// Errors are only returned if there are issues accessing the filesystem.
+    pub fn delete(&mut self, key: &str) -> Result<()> {
+        // Remove from L1 memory cache
+        self.memory.pop(key);
+
+        // Remove from L2 disk cache
+        let path = self.key_to_path(key)?;
+        if path.exists() {
+            std::fs::remove_file(&path).map_err(|e| {
+                RexError::config_with_source(
+                    "Failed to delete cache file",
+                    Some(path.display().to_string()),
+                    e,
+                )
+            })?;
+        }
+
+        Ok(())
+    }
+
     /// Removes expired files from the on-disk cache.
     pub fn prune(&self) -> Result<PruneStats> {
         let mut stats = PruneStats::default();

@@ -122,6 +122,15 @@ enum ImageCommands {
         #[arg(long)]
         raw_config: bool,
     },
+    /// Remove an image or all tags from a repository
+    #[command(visible_alias = "rm")]
+    Remove {
+        /// Image reference (name:tag for single tag, or name for all tags)
+        reference: String,
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -417,6 +426,9 @@ fn main() {
                     raw_manifest,
                     raw_config,
                 );
+            }
+            ImageCommands::Remove { reference, force } => {
+                commands::image::handlers::handle_image_remove(&ctx, reference.as_str(), force);
             }
         },
         Commands::Search {

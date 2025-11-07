@@ -377,4 +377,198 @@ impl Registry {
     pub fn clear_credentials(&mut self) {
         self.credentials = None;
     }
+
+    /// Deletes a specific tag by resolving it to a digest first.
+    ///
+    /// According to the OCI Distribution Specification, manifests can only be deleted
+    /// by digest, not by tag. This method first fetches the manifest for the given tag
+    /// to obtain its digest, then deletes the manifest using that digest.
+    ///
+    /// # Arguments
+    ///
+    /// * `repository` - The repository name
+    /// * `tag` - The tag name to delete
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if the tag was successfully deleted.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use librex::client::Client;
+    /// # use librex::registry::Registry;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = Client::new("http://localhost:5000", None)?;
+    /// let mut registry = Registry::new(client, None, None);
+    ///
+    /// registry.delete_tag("alpine", "latest")?;
+    /// println!("Tag deleted successfully");
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The tag does not exist
+    /// - Authentication is required but not provided
+    /// - The registry does not support manifest deletion
+    /// - Network or server errors occur
+    pub fn delete_tag(&mut self, repository: &str, tag: &str) -> Result<()> {
+        // First, get the manifest to retrieve its digest
+        // Construct a reference from repository and tag
+        use std::str::FromStr;
+        let ref_str = format!("{}:{}", repository, tag);
+        let reference = Reference::from_str(&ref_str)?;
+
+        let (_manifest, digest) = self.get_manifest(&reference)?;
+
+        // Invalidate tag-based manifest cache entry
+        if let Some(cache) = &mut self.cache {
+            let tag_cache_key = format!("{}/tags/{}/manifest", repository, tag);
+            let _ = cache.delete(&tag_cache_key);
+        }
+
+        // Invalidate tags list cache (since we're removing a tag)
+        if let Some(cache) = &mut self.cache {
+            let tags_cache_key = format!("{}/_tags", repository);
+            let _ = cache.delete(&tags_cache_key);
+        }
+
+        // Now delete using the digest (this will also invalidate digest-based cache)
+        self.delete_manifest(repository, &digest)
+    }
+
+    /// Deletes a manifest by digest.
+    ///
+    /// This is a low-level method that directly deletes a manifest using its digest.
+    /// Most users should use `delete_tag()` instead, which automatically resolves
+    /// the tag to a digest.
+    ///
+    /// # Arguments
+    ///
+    /// * `repository` - The repository name
+    /// * `digest` - The manifest digest to delete
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if the manifest was successfully deleted.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use librex::client::Client;
+    /// # use librex::registry::Registry;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = Client::new("http://localhost:5000", None)?;
+    /// let mut registry = Registry::new(client, None, None);
+    ///
+    /// let digest = "sha256:abc123...";
+    /// registry.delete_manifest("alpine", digest)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The manifest does not exist
+    /// - Authentication is required but not provided
+    /// - The registry does not support manifest deletion
+    /// - Network or server errors occur
+    pub fn delete_manifest(&mut self, repository: &str, digest: &str) -> Result<()> {
+        // Invalidate digest-based manifest cache entry
+        if let Some(cache) = &mut self.cache {
+            let cache_key = format!("{}/manifests/{}", repository, digest);
+            // Ignore errors from cache deletion
+            let _ = cache.delete(&cache_key);
+        }
+
+        // Delete the manifest from the registry
+        self.client.delete_manifest(repository, digest)
+    }
+
+    /// Deletes all tags for a repository.
+    ///
+    /// This method lists all tags for the given repository and deletes them one by one.
+    /// If some deletions fail, it continues with the remaining tags and returns the list
+    /// of successfully deleted tags. If all deletions fail, an error is returned.
+    ///
+    /// # Arguments
+    ///
+    /// * `repository` - The repository name
+    ///
+    /// # Returns
+    ///
+    /// A vector of successfully deleted tag names.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use librex::client::Client;
+    /// # use librex::registry::Registry;
+    /// #
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = Client::new("http://localhost:5000", None)?;
+    /// let mut registry = Registry::new(client, None, None);
+    ///
+    /// let deleted = registry.delete_all_tags("alpine")?;
+    /// println!("Deleted {} tags", deleted.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Failed to list tags
+    /// - All deletion attempts failed
+    /// - Authentication is required but not provided
+    /// - The registry does not support manifest deletion
+    pub fn delete_all_tags(&mut self, repository: &str) -> Result<Vec<String>> {
+        // List all tags
+        let tags = self.list_tags(repository)?;
+
+        if tags.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut deleted = Vec::new();
+        let mut errors = Vec::new();
+
+        for tag in tags {
+            match self.delete_tag(repository, &tag) {
+                Ok(()) => deleted.push(tag),
+                Err(e) => errors.push((tag, e)),
+            }
+        }
+
+        // Invalidate tags list cache once at the end (delete_tag also does this per tag,
+        // but doing it here ensures it's invalidated even if some deletions failed)
+        if !deleted.is_empty()
+            && let Some(cache) = &mut self.cache
+        {
+            let tags_cache_key = format!("{}/_tags", repository);
+            let _ = cache.delete(&tags_cache_key);
+        }
+
+        // If no tags were deleted successfully, return an error
+        if deleted.is_empty() && !errors.is_empty() {
+            use crate::error::RexError;
+            return Err(RexError::validation(format!(
+                "Failed to delete all tags: {}",
+                errors
+                    .iter()
+                    .map(|(tag, err)| format!("{}: {}", tag, err))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        }
+
+        // Return successfully deleted tags (even if some failed)
+        Ok(deleted)
+    }
 }
