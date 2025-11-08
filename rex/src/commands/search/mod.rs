@@ -6,6 +6,9 @@ use serde::Serialize;
 
 pub mod handlers;
 
+#[cfg(test)]
+mod tests;
+
 /// Search results containing both images and tags
 #[derive(Debug, Serialize)]
 pub struct SearchResults {

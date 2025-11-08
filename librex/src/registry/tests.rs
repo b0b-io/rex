@@ -377,3 +377,346 @@ fn test_cache_delete_nonexistent_key_is_safe() {
     let result = cache.delete("nonexistent/key");
     assert!(result.is_ok());
 }
+
+// Mock-based integration tests
+#[test]
+fn test_list_repositories_without_cache() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/_catalog")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"repositories":["alpine","nginx","redis"]}"#)
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None);
+
+    let repos = registry.list_repositories().unwrap();
+
+    mock.assert();
+    assert_eq!(repos.len(), 3);
+    assert_eq!(repos[0], "alpine");
+    assert_eq!(repos[1], "nginx");
+    assert_eq!(repos[2], "redis");
+}
+
+#[test]
+fn test_list_repositories_with_cache() {
+    use crate::config::Config;
+    use std::num::NonZeroUsize;
+    use tempfile::TempDir;
+
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/_catalog")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"repositories":["alpine","nginx"]}"#)
+        .create();
+
+    let temp_dir = TempDir::new().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, Some(cache), None);
+
+    // First call - should hit the server
+    let repos1 = registry.list_repositories().unwrap();
+    assert_eq!(repos1.len(), 2);
+    mock.assert();
+
+    // Second call - should use cache (mock won't be called again)
+    let repos2 = registry.list_repositories().unwrap();
+    assert_eq!(repos2.len(), 2);
+    assert_eq!(repos1, repos2);
+}
+
+#[test]
+fn test_list_tags_without_cache() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/alpine/tags/list")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"name":"alpine","tags":["3.14","3.15","latest"]}"#)
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None);
+
+    let tags = registry.list_tags("alpine").unwrap();
+
+    mock.assert();
+    assert_eq!(tags.len(), 3);
+    assert_eq!(tags[0], "3.14");
+    assert_eq!(tags[1], "3.15");
+    assert_eq!(tags[2], "latest");
+}
+
+#[test]
+fn test_list_tags_with_cache() {
+    use crate::config::Config;
+    use std::num::NonZeroUsize;
+    use tempfile::TempDir;
+
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/alpine/tags/list")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"name":"alpine","tags":["3.14","latest"]}"#)
+        .create();
+
+    let temp_dir = TempDir::new().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, Some(cache), None);
+
+    // First call - should hit the server
+    let tags1 = registry.list_tags("alpine").unwrap();
+    assert_eq!(tags1.len(), 2);
+    mock.assert();
+
+    // Second call - should use cache
+    let tags2 = registry.list_tags("alpine").unwrap();
+    assert_eq!(tags2.len(), 2);
+    assert_eq!(tags1, tags2);
+}
+
+#[test]
+fn test_get_manifest_without_cache() {
+    use std::str::FromStr;
+
+    let mut server = mockito::Server::new();
+    let manifest_body = r#"{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","size":1234,"digest":"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"layers":[]}"#;
+
+    let mock = server
+        .mock("GET", "/v2/library/alpine/manifests/latest")
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+        .with_header("docker-content-digest", "sha256:abc123")
+        .with_body(manifest_body)
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None);
+
+    let reference = Reference::from_str("alpine:latest").unwrap();
+    let result = registry.get_manifest(&reference);
+
+    mock.assert();
+
+    // Check if we got an error or success
+    match result {
+        Ok((manifest_or_index, digest)) => {
+            assert!(manifest_or_index.is_manifest());
+            assert_eq!(digest, "sha256:abc123");
+        }
+        Err(e) => {
+            panic!("Expected success but got error: {:?}", e);
+        }
+    }
+}
+
+#[test]
+fn test_get_manifest_with_cache() {
+    use crate::config::Config;
+    use std::num::NonZeroUsize;
+    use std::str::FromStr;
+    use tempfile::TempDir;
+
+    let mut server = mockito::Server::new();
+    let manifest_body = r#"{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","size":1234,"digest":"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"layers":[]}"#;
+
+    let mock = server
+        .mock("GET", "/v2/library/alpine/manifests/latest")
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+        .with_header("docker-content-digest", "sha256:abc123")
+        .with_body(manifest_body)
+        .expect(1) // Should only be called once
+        .create();
+
+    let temp_dir = TempDir::new().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, Some(cache), None);
+
+    let reference = Reference::from_str("alpine:latest").unwrap();
+
+    // First call - should hit the server
+    let result1 = registry.get_manifest(&reference);
+    mock.assert();
+
+    if let Ok((manifest1, digest1)) = result1 {
+        assert!(manifest1.is_manifest());
+        // The first digest comes from the HTTP header
+        assert_eq!(digest1, "sha256:abc123");
+
+        // Second call - should use cache
+        let (manifest2, digest2) = registry.get_manifest(&reference).unwrap();
+        assert!(manifest2.is_manifest());
+        // The cached digest is recomputed from bytes, so it will be different
+        // Just verify it's a valid sha256
+        assert!(digest2.starts_with("sha256:"));
+        assert_eq!(digest2.len(), 71); // sha256: + 64 hex chars
+    } else {
+        panic!("Expected success but got error: {:?}", result1.unwrap_err());
+    }
+}
+
+#[test]
+fn test_get_blob_without_cache() {
+    use sha2::{Digest as Sha2Digest, Sha256};
+    use std::str::FromStr;
+
+    let mut server = mockito::Server::new();
+    let blob_content = b"test blob content";
+
+    // Calculate the actual SHA256 hash
+    let mut hasher = Sha256::new();
+    hasher.update(blob_content);
+    let hash = format!("{:x}", hasher.finalize());
+    let digest = format!("sha256:{}", hash);
+
+    let mock = server
+        .mock("GET", format!("/v2/alpine/blobs/{}", digest).as_str())
+        .with_status(200)
+        .with_body(blob_content)
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None);
+
+    let digest_obj = Digest::from_str(&digest).unwrap();
+    let blob = registry.get_blob("alpine", &digest_obj).unwrap();
+
+    mock.assert();
+    assert_eq!(blob, blob_content);
+}
+
+#[test]
+fn test_get_blob_with_cache() {
+    use crate::config::Config;
+    use sha2::{Digest as Sha2Digest, Sha256};
+    use std::num::NonZeroUsize;
+    use std::str::FromStr;
+    use tempfile::TempDir;
+
+    let mut server = mockito::Server::new();
+    let blob_content = b"test blob content";
+
+    // Calculate the actual SHA256 hash
+    let mut hasher = Sha256::new();
+    hasher.update(blob_content);
+    let hash = format!("{:x}", hasher.finalize());
+    let digest = format!("sha256:{}", hash);
+
+    let mock = server
+        .mock("GET", format!("/v2/alpine/blobs/{}", digest).as_str())
+        .with_status(200)
+        .with_body(blob_content)
+        .expect(1) // Should only be called once
+        .create();
+
+    let temp_dir = TempDir::new().unwrap();
+    let config = Config::default();
+    let capacity = NonZeroUsize::new(100).unwrap();
+    let cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, Some(cache), None);
+
+    let digest_obj = Digest::from_str(&digest).unwrap();
+
+    // First call - should hit the server
+    let blob1 = registry.get_blob("alpine", &digest_obj).unwrap();
+    assert_eq!(blob1, blob_content);
+
+    // Second call - should use cache
+    let blob2 = registry.get_blob("alpine", &digest_obj).unwrap();
+    assert_eq!(blob2, blob_content);
+
+    mock.assert();
+}
+
+#[test]
+fn test_check_version_success() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/")
+        .with_status(200)
+        .with_header("Docker-Distribution-API-Version", "registry/2.0")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None);
+
+    let result = registry.check_version();
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_check_version_failure() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/")
+        .with_status(500)
+        .with_body("internal server error")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None);
+
+    let result = registry.check_version();
+
+    mock.assert();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_list_repositories_error() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/_catalog")
+        .with_status(401)
+        .with_body("authentication required")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None);
+
+    let result = registry.list_repositories();
+
+    mock.assert();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_list_tags_error() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/alpine/tags/list")
+        .with_status(404)
+        .with_body("repository not found")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None);
+
+    let result = registry.list_tags("alpine");
+
+    mock.assert();
+    assert!(result.is_err());
+}
