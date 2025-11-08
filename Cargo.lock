@@ -1179,6 +1179,7 @@ dependencies = [
  "config",
  "humansize",
  "lru",
+ "mockito",
  "nucleo-matcher",
  "oci-spec",
  "reqwest",
