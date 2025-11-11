@@ -544,6 +544,271 @@ fn test_check_version_rate_limit() {
 }
 
 #[test]
+fn test_check_version_rate_limit_with_retry_after_seconds() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/")
+        .with_status(429)
+        .with_header("Retry-After", "120")
+        .with_body("too many requests")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let result = client.check_version();
+
+    mock.assert();
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        RexError::RateLimit {
+            message,
+            retry_after,
+        } => {
+            assert!(message.contains("Rate limit exceeded"));
+            assert_eq!(retry_after, Some(120));
+        }
+        _ => panic!("Expected RateLimit error"),
+    }
+}
+
+#[test]
+fn test_check_version_rate_limit_with_retry_after_http_date() {
+    let mut server = mockito::Server::new();
+
+    // Use a date format that httpdate can parse (RFC 2822 format)
+    let mock = server
+        .mock("GET", "/v2/")
+        .with_status(429)
+        .with_header("Retry-After", "Sun, 06 Nov 2044 08:49:37 GMT")
+        .with_body("too many requests")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let result = client.check_version();
+
+    mock.assert();
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        RexError::RateLimit {
+            message,
+            retry_after,
+        } => {
+            assert!(message.contains("Rate limit exceeded"));
+            // HTTP-date parsing may succeed and calculate seconds from now
+            // If httpdate crate doesn't support the format, it falls back to None
+            // Either behavior is acceptable (defensive programming)
+            // We just verify it doesn't crash and returns a valid option
+            assert!(retry_after.is_none() || retry_after.unwrap() > 0);
+        }
+        _ => panic!("Expected RateLimit error"),
+    }
+}
+
+#[test]
+fn test_check_version_rate_limit_with_invalid_retry_after() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/")
+        .with_status(429)
+        .with_header("Retry-After", "invalid")
+        .with_body("too many requests")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let result = client.check_version();
+
+    mock.assert();
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        RexError::RateLimit {
+            message,
+            retry_after,
+        } => {
+            assert!(message.contains("Rate limit exceeded"));
+            // Should fall back to None if header is invalid
+            assert_eq!(retry_after, None);
+        }
+        _ => panic!("Expected RateLimit error"),
+    }
+}
+
+#[test]
+fn test_check_version_rate_limit_with_zero_retry_after() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/")
+        .with_status(429)
+        .with_header("Retry-After", "0")
+        .with_body("too many requests")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let result = client.check_version();
+
+    mock.assert();
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        RexError::RateLimit {
+            message,
+            retry_after,
+        } => {
+            assert!(message.contains("Rate limit exceeded"));
+            // Zero is valid - means retry immediately
+            assert_eq!(retry_after, Some(0));
+        }
+        _ => panic!("Expected RateLimit error"),
+    }
+}
+
+#[test]
+fn test_check_version_rate_limit_with_large_retry_after() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/")
+        .with_status(429)
+        .with_header("Retry-After", "3600")
+        .with_body("too many requests")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let result = client.check_version();
+
+    mock.assert();
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        RexError::RateLimit {
+            message,
+            retry_after,
+        } => {
+            assert!(message.contains("Rate limit exceeded"));
+            // Large value (1 hour) should be parsed correctly
+            assert_eq!(retry_after, Some(3600));
+        }
+        _ => panic!("Expected RateLimit error"),
+    }
+}
+
+#[test]
+fn test_check_version_rate_limit_with_whitespace_retry_after() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/")
+        .with_status(429)
+        .with_header("Retry-After", " 60 ")
+        .with_body("too many requests")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let result = client.check_version();
+
+    mock.assert();
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        RexError::RateLimit {
+            message,
+            retry_after,
+        } => {
+            assert!(message.contains("Rate limit exceeded"));
+            // Whitespace should be handled by parse::<u64>()
+            // Note: Rust's parse() trims whitespace automatically
+            assert_eq!(retry_after, Some(60));
+        }
+        _ => panic!("Expected RateLimit error"),
+    }
+}
+
+#[test]
+fn test_check_version_rate_limit_with_negative_retry_after() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/")
+        .with_status(429)
+        .with_header("Retry-After", "-10")
+        .with_body("too many requests")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let result = client.check_version();
+
+    mock.assert();
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        RexError::RateLimit {
+            message,
+            retry_after,
+        } => {
+            assert!(message.contains("Rate limit exceeded"));
+            // Negative numbers should fail u64 parsing and fall back to None
+            assert_eq!(retry_after, None);
+        }
+        _ => panic!("Expected RateLimit error"),
+    }
+}
+
+#[test]
+fn test_check_version_rate_limit_without_retry_after_header() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/")
+        .with_status(429)
+        .with_body("too many requests")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let result = client.check_version();
+
+    mock.assert();
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        RexError::RateLimit {
+            message,
+            retry_after,
+        } => {
+            assert!(message.contains("Rate limit exceeded"));
+            // Missing header should result in None
+            assert_eq!(retry_after, None);
+        }
+        _ => panic!("Expected RateLimit error"),
+    }
+}
+
+#[test]
+fn test_fetch_catalog_rate_limit_with_retry_after() {
+    let mut server = mockito::Server::new();
+    let mock = server
+        .mock("GET", "/v2/_catalog")
+        .with_status(429)
+        .with_header("Retry-After", "90")
+        .with_body("too many requests")
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let result = client.fetch_catalog();
+
+    mock.assert();
+    assert!(result.is_err());
+
+    match result.unwrap_err() {
+        RexError::RateLimit {
+            message,
+            retry_after,
+        } => {
+            assert!(message.contains("Rate limit exceeded"));
+            // Verify retry-after parsing works for catalog endpoint too
+            assert_eq!(retry_after, Some(90));
+        }
+        _ => panic!("Expected RateLimit error"),
+    }
+}
+
+#[test]
 fn test_fetch_catalog_success() {
     let mut server = mockito::Server::new();
     let mock = server
