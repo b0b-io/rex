@@ -842,6 +842,42 @@ impl Client {
         None
     }
 
+    /// Parses the Retry-After header from a rate limit response.
+    ///
+    /// The Retry-After header can be in two formats per RFC 7231:
+    /// 1. Delay-seconds: `Retry-After: 120`
+    /// 2. HTTP-date: `Retry-After: Wed, 21 Oct 2025 07:28:00 GMT`
+    ///
+    /// Returns the retry delay in seconds, or None if the header is missing or invalid.
+    fn parse_retry_after(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+        let retry_after = headers.get(reqwest::header::RETRY_AFTER)?;
+        let retry_str = retry_after.to_str().ok()?;
+
+        // Try parsing as delay-seconds (integer)
+        if let Ok(seconds) = retry_str.parse::<u64>() {
+            return Some(seconds);
+        }
+
+        // Try parsing as HTTP-date
+        if let Ok(datetime) = httpdate::parse_http_date(retry_str) {
+            // Calculate seconds from now until the retry time
+            let now = std::time::SystemTime::now();
+
+            // If datetime is in the future, calculate how many seconds until then
+            if datetime > now {
+                if let Ok(duration) = datetime.duration_since(now) {
+                    return Some(duration.as_secs());
+                }
+            } else {
+                // If datetime is in the past, return 0 (can retry immediately)
+                return Some(0);
+            }
+        }
+
+        // Invalid or unparseable format
+        None
+    }
+
     /// Translates a reqwest error into a RexError.
     fn translate_reqwest_error(error: reqwest::Error, registry_url: &str) -> RexError {
         if error.is_timeout() {
@@ -875,8 +911,11 @@ impl Client {
             return Ok(response);
         }
 
-        // Try to extract error message from response body
+        // Extract headers and URL before consuming the response
+        let headers = response.headers().clone();
         let url = response.url().to_string();
+
+        // Try to extract error message from response body
         let error_body = response
             .text()
             .unwrap_or_else(|_| String::from("(unable to read response body)"));
@@ -892,10 +931,10 @@ impl Client {
             )),
             StatusCode::NOT_FOUND => Err(RexError::not_found("endpoint", &url)),
             StatusCode::TOO_MANY_REQUESTS => {
-                // TODO: Parse Retry-After header
+                let retry_after = Self::parse_retry_after(&headers);
                 Err(RexError::rate_limit(
                     format!("Rate limit exceeded for {}", url),
-                    None,
+                    retry_after,
                 ))
             }
             StatusCode::INTERNAL_SERVER_ERROR
