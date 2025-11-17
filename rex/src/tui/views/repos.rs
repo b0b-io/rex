@@ -2,9 +2,17 @@
 //!
 //! Provides the data structure and state management for the repository list view.
 
+use ratatui::{
+    Frame,
+    layout::{Constraint, Rect},
+    widgets::{Block, Borders, Cell, Row, Table},
+};
+
+use crate::tui::theme::Theme;
+
 /// A repository item in the list.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)] // TODO: Remove when integrated into main TUI loop
+#[allow(dead_code)] // TODO: Remove when integrated into main TUI loop (Task 3.3)
 pub struct RepositoryItem {
     /// Repository name
     pub name: String,
@@ -18,7 +26,7 @@ pub struct RepositoryItem {
 
 /// State for the repository list view.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // TODO: Remove when integrated into main TUI loop
+#[allow(dead_code)] // TODO: Remove when integrated into main TUI loop (Task 3.3)
 pub struct RepositoryListState {
     /// List of repository items
     pub items: Vec<RepositoryItem>,
@@ -32,7 +40,7 @@ pub struct RepositoryListState {
     pub filter: String,
 }
 
-#[allow(dead_code)] // TODO: Remove when integrated into main TUI loop
+#[allow(dead_code)] // TODO: Remove when integrated into main TUI loop (Task 3.3)
 impl RepositoryListState {
     /// Create a new repository list state.
     ///
@@ -186,6 +194,67 @@ impl RepositoryListState {
                 .filter(|item| item.name.contains(&self.filter))
                 .collect()
         }
+    }
+
+    /// Render the repository list view.
+    ///
+    /// Displays a table with columns for repository name, tag count, size, and last updated.
+    /// The selected row is highlighted with a selection indicator (▶).
+    ///
+    /// # Arguments
+    ///
+    /// * `frame` - The ratatui frame to render to
+    /// * `area` - The rectangular area to render in
+    /// * `theme` - The theme to use for styling
+    pub fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        let items = self.filtered_items();
+
+        // Header row
+        let header = Row::new(vec![
+            Cell::from("NAME"),
+            Cell::from("TAGS"),
+            Cell::from("SIZE"),
+            Cell::from("LAST UPDATED"),
+        ])
+        .style(theme.title_style());
+
+        // Data rows
+        let rows: Vec<Row> = items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                let style = if i == self.selected {
+                    theme.selected_style()
+                } else {
+                    ratatui::style::Style::default()
+                };
+
+                let indicator = if i == self.selected { "▶ " } else { "  " };
+
+                Row::new(vec![
+                    Cell::from(format!("{}{}", indicator, item.name)),
+                    Cell::from(item.tag_count.to_string()),
+                    Cell::from(librex::format::format_size(item.total_size)),
+                    Cell::from(item.last_updated.as_deref().unwrap_or("-")),
+                ])
+                .style(style)
+            })
+            .collect();
+
+        let widths = [
+            Constraint::Percentage(40),
+            Constraint::Length(10),
+            Constraint::Length(12),
+            Constraint::Percentage(30),
+        ];
+
+        let table = Table::new(rows, widths).header(header).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(theme.border_style()),
+        );
+
+        frame.render_widget(table, area);
     }
 }
 
