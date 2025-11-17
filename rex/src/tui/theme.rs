@@ -33,10 +33,8 @@ pub struct Theme {
     #[allow(dead_code)] // TODO: Remove when error messages are implemented
     pub error: Color,
     /// Info/neutral color
-    #[allow(dead_code)] // TODO: Remove when info styling is used (footer keybindings)
     pub info: Color,
     /// Muted/disabled color
-    #[allow(dead_code)] // TODO: Remove when muted text is used
     pub muted: Color,
 }
 
@@ -135,13 +133,11 @@ impl Theme {
     }
 
     /// Style for info messages.
-    #[allow(dead_code)] // TODO: Remove when info styling is used (footer)
     pub fn info_style(&self) -> Style {
         Style::default().fg(self.info)
     }
 
     /// Style for muted/disabled text.
-    #[allow(dead_code)] // TODO: Remove when muted text is used
     pub fn muted_style(&self) -> Style {
         Style::default().fg(self.muted)
     }

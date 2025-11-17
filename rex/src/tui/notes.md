@@ -71,23 +71,108 @@ This module provides the Terminal User Interface (TUI) for Rex, allowing interac
 - Remove `#[allow(dead_code)]` when integrating with CLI
 - Add `tui` subcommand to main.rs
 
-## Implementation Status
+## Current Implementation State
 
-### ✅ Completed
-- [x] Module structure (mod.rs + tests.rs)
-- [x] Terminal initialization (setup_terminal)
-- [x] Terminal cleanup (restore_terminal)
-- [x] Basic event loop (run function)
-- [x] Quit on 'q' functionality
+### Phase 1: Foundation (Completed)
 
-### ⏳ Pending
-- [ ] Theme system
-- [ ] Shell components (title, footer, context bar)
-- [ ] Event handling system
-- [ ] Application state management
-- [ ] Worker threads for background operations
-- [ ] Views (repository list, tag list, details)
-- [ ] Integration with CLI
+The TUI foundation has been implemented following the incremental plan in `tui-implementation-plan.md`. Key components completed:
+
+**Terminal Management**:
+- Terminal setup/teardown with alternate screen and raw mode
+- Proper cleanup on exit (including Ctrl+C)
+- Basic event polling loop
+
+**Theme System** (theme.rs):
+- Catppuccin-inspired color scheme (Mocha for dark, Latte for light)
+- Semantic color categories (success, warning, error, info, muted)
+- Style helper methods to maintain consistency
+- Decision: Use RGB colors for precise control vs terminal color indexes
+  - Trade-off: Not dependent on user terminal themes, but requires true color support
+  - Rationale: Modern terminals support true color, and we want consistent appearance
+
+**Shell Layout System** (shell.rs):
+- Five-part layout: title bar, context bar (optional), content, status line (optional), footer
+- Dynamic layout calculation based on terminal size and component visibility
+- Decision: Content area always fills remaining space using `Constraint::Min(0)`
+  - Rationale: Ensures scrollable content has maximum available space
+
+**Shell Components**:
+- `TitleBar`: App name on left, registry info on right with `[r]` shortcut
+  - Handles narrow terminals by truncating intelligently
+- `Footer`: Action list with key bindings, styled differently for enabled/disabled actions
+  - Keys highlighted in info color for discoverability
+- `Action`: Struct representing key bindings with enabled/disabled state
+
+**Event System** (events.rs):
+- Event enum with categories: navigation, actions, special keys, system events
+- EventHandler struct for key mapping with configurable vim mode
+- Decision: Map crossterm events to high-level application events
+  - Rationale: Decouples input handling from view logic, making views testable
+  - Trade-off: Extra abstraction layer, but improves testability and maintainability
+- Decision: Vim mode as optional parameter
+  - Rationale: Power users can use hjkl, but doesn't interfere with arrow keys
+  - Implementation: Conditional key mapping based on vim_mode flag
+- Ctrl+C maps to Quit event for consistency
+- Unknown keys map to Char('\0') to avoid polluting event stream
+
+### Phase 2: Core Infrastructure (In Progress)
+
+**Application State** (app.rs):
+- View enum representing all possible application views
+- Message enum for worker-to-UI communication
+- App struct with state management and view stack
+- Decision: Use channels (mpsc) for message passing
+  - Rationale: Standard library solution, no external dependencies needed
+  - Trade-off: Single producer patterns easier, but sufficient for our needs
+- Decision: Result type uses `Send + Sync` error bounds
+  - Rationale: Allows errors to be passed across thread boundaries in messages
+  - Implementation: `Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>`
+- View stack for back navigation (push/pop)
+- Event routing delegates to view-specific handlers (to be implemented)
+- Worker spawning infrastructure ready for background I/O
+
+**Worker System** (worker.rs):
+- Three worker functions: fetch_repositories, fetch_tags, fetch_manifest
+- Each worker runs in a background thread, performs I/O, sends result via channel
+- Decision: Workers are short-lived, single-purpose functions
+  - Rationale: Simple model, automatic resource cleanup
+  - Thread spawns, does one task, sends message, exits
+- Integration with librex Rex client for registry operations
+- Decision: Use blocking librex API (not async)
+  - Rationale: Matches TUI synchronous architecture, workers run in threads
+  - Trade-off: One thread per operation vs async tasks, but simpler
+- Proper error handling with Result propagation
+- Workers require mutable Rex instance (librex API design)
+
+### Phase 3: Basic Views (In Progress)
+
+**Repository List View** (views/repos.rs):
+- Data Model (Task 3.1) - **Completed**
+  - `RepositoryItem`: Struct representing a repository with name, tag count, size, and last updated
+  - `RepositoryListState`: State management for the repository list view
+  - Navigation: select_next(), select_previous()
+  - Selection: selected_item() to get currently selected repository
+  - Filtering: filtered_items() for search functionality
+  - Decision: Case-sensitive filtering for precision
+    - Rationale: Users typically know exact names, case-sensitive is more predictable
+    - Trade-off: Less forgiving but more precise
+  - Testing: 10 tests covering navigation, selection bounds, and filtering
+  - Coverage: All functionality tested including edge cases (empty list, boundaries)
+
+**Next Steps**:
+- Task 3.2: Repository list rendering (Table widget with 4 columns)
+- Task 3.3: Repository list integration with workers
+- Tasks 3.4-3.7: Tag list and image details views
+
+### Pending: Phase 3-5
+
+**Phase 2** will add application state management with message passing for background operations.
+
+**Phase 3** will implement the core views (repository list, tag list, details).
+
+**Phase 4** will add interactive features (search, modals, status banners).
+
+**Phase 5** focuses on polish, error handling, and performance optimization.
 
 ## Testing Notes
 
