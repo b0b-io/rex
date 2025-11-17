@@ -78,7 +78,6 @@ pub use rex::{Rex, RexBuilder};
 
 // Re-export commonly used types for convenience
 pub use auth::Credentials;
-pub use config::Config;
 pub use digest::Digest;
 pub use error::{Result, RexError};
 pub use oci::ManifestOrIndex;
@@ -93,8 +92,6 @@ pub mod auth;
 pub mod cache;
 #[doc(hidden)]
 pub mod client;
-#[doc(hidden)]
-pub mod config;
 #[doc(hidden)]
 pub mod digest;
 #[doc(hidden)]
