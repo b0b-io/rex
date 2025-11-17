@@ -2,11 +2,14 @@
 //!
 //! Provides an interactive terminal interface for exploring container registries.
 
+pub mod app;
+pub mod events;
 pub mod shell;
 pub mod theme;
+pub mod views;
+pub mod worker;
 
 use crossterm::{
-    event::{self, Event, KeyCode},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
@@ -14,23 +17,44 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io::{self, Stdout};
 use std::time::Duration;
 
-use shell::{ShellLayout, TitleBar};
+use events::{Event, EventHandler};
+use shell::{Action, Footer, ShellLayout, TitleBar};
 use theme::Theme;
 
 /// Result type for TUI operations.
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+///
+/// The error type is `Send + Sync` to allow passing across thread boundaries.
+pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// Run the TUI application.
+///
+/// # Arguments
+///
+/// * `ctx` - Application context with configuration
 ///
 /// # Errors
 ///
 /// Returns an error if terminal setup, event handling, or cleanup fails.
-pub fn run() -> Result<()> {
+pub fn run(ctx: &crate::context::AppContext) -> Result<()> {
     let mut terminal = setup_terminal()?;
 
-    // Create theme and components
-    let theme = Theme::dark();
-    let title_bar = TitleBar::new().with_registry("localhost:5000".to_string());
+    // Get theme from config
+    let theme = match ctx.config.tui.theme.as_str() {
+        "light" => Theme::light(),
+        _ => Theme::dark(), // Default to dark
+    };
+
+    // Get registry from config
+    let registry = get_registry_url(&ctx.config)?;
+
+    let title_bar = TitleBar::new().with_registry(registry.clone());
+    let footer = Footer::new(vec![Action::new("?", "Help"), Action::new("q", "Quit")]);
+
+    // Create event handler with configured vim mode
+    let event_handler = EventHandler::new(ctx.config.tui.vim_mode);
+
+    // Get configured poll interval
+    let poll_interval = Duration::from_millis(ctx.config.tui.poll_interval);
 
     // Main loop
     loop {
@@ -44,14 +68,22 @@ pub fn run() -> Result<()> {
             title_bar.render(f, layout.title_bar, &theme);
 
             // TODO: Render content area (will be implemented in later tasks)
-            // TODO: Render footer (Task 1.6)
+
+            // Render footer
+            footer.render(f, layout.footer, &theme);
         })?;
 
-        if event::poll(Duration::from_millis(100))?
-            && let Event::Key(key) = event::read()?
-            && key.code == KeyCode::Char('q')
-        {
-            break;
+        // Poll for events with configured interval
+        if let Some(event) = event_handler.poll(poll_interval)? {
+            match event {
+                Event::Quit => break,
+                Event::Resize(_, _) => {
+                    // Terminal will automatically redraw on next iteration
+                }
+                _ => {
+                    // TODO: Handle other events when views are implemented
+                }
+            }
         }
     }
 
@@ -87,6 +119,28 @@ fn restore_terminal(mut terminal: Terminal<CrosstermBackend<Stdout>>) -> Result<
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     Ok(())
+}
+
+/// Get registry URL from config.
+///
+/// Returns the default registry from config, or falls back to localhost:5000.
+fn get_registry_url(config: &crate::config::Config) -> Result<String> {
+    // Use default registry from config
+    if let Some(default_name) = &config.registries.default {
+        for entry in &config.registries.list {
+            if entry.name == *default_name {
+                return Ok(entry.url.clone());
+            }
+        }
+    }
+
+    // Fallback to first registry if available
+    if let Some(first) = config.registries.list.first() {
+        return Ok(first.url.clone());
+    }
+
+    // Fallback to localhost
+    Ok("localhost:5000".to_string())
 }
 
 #[cfg(test)]

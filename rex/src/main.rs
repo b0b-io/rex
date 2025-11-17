@@ -448,7 +448,7 @@ fn main() {
             clap_complete::generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
         }
         Commands::Tui => {
-            if let Err(e) = tui::run() {
+            if let Err(e) = tui::run(&ctx) {
                 eprintln!("TUI error: {}", e);
                 std::process::exit(1);
             }
