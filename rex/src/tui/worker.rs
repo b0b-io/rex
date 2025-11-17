@@ -30,7 +30,6 @@ use super::app::Message;
 ///     fetch_repositories("localhost:5000".to_string(), tx);
 /// });
 /// ```
-#[allow(dead_code)] // TODO: Remove when integrated with views
 pub fn fetch_repositories(registry_url: String, tx: Sender<Message>) {
     let result = (|| -> Result<Vec<String>> {
         // Connect to registry

@@ -10,6 +10,7 @@ use super::Result;
 use super::events::Event;
 use super::theme::Theme;
 use super::views::repos::{RepositoryItem, RepositoryListState};
+use super::worker;
 
 /// Views in the application.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -407,16 +408,12 @@ impl App {
     /// ```
     pub fn load_repositories(&mut self) {
         self.repo_list_state.loading = true;
-        let _registry_url = self.current_registry.clone();
+        let registry_url = self.current_registry.clone();
+        let tx = self.tx.clone();
 
-        self.spawn_worker(move || {
-            // TODO: Use worker::fetch_repositories(_registry_url) when implemented
-            // For now, return a simple mock message
-            Message::RepositoriesLoaded(Ok(vec![
-                "alpine".to_string(),
-                "nginx".to_string(),
-                "redis".to_string(),
-            ]))
+        // Spawn worker thread to fetch repositories
+        std::thread::spawn(move || {
+            worker::fetch_repositories(registry_url, tx);
         });
     }
 }
