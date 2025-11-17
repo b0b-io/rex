@@ -345,3 +345,123 @@ fn test_full_navigation_flow() {
     app.handle_event(Event::Quit).unwrap();
     assert!(app.should_quit);
 }
+
+// Repository list integration tests
+
+#[test]
+fn test_repo_list_state_initialized() {
+    let app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+
+    assert_eq!(app.repo_list_state.items.len(), 0);
+    assert_eq!(app.repo_list_state.selected, 0);
+    assert!(!app.repo_list_state.loading);
+}
+
+#[test]
+fn test_handle_repositories_loaded_populates_repo_list_state() {
+    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    app.repo_list_state.loading = true;
+
+    let repos = vec!["alpine".to_string(), "nginx".to_string()];
+    app.handle_message(Message::RepositoriesLoaded(Ok(repos.clone())));
+
+    assert_eq!(app.repo_list_state.items.len(), 2);
+    assert_eq!(app.repo_list_state.items[0].name, "alpine");
+    assert_eq!(app.repo_list_state.items[1].name, "nginx");
+    assert!(!app.repo_list_state.loading);
+}
+
+#[test]
+fn test_handle_repositories_loaded_error_clears_loading() {
+    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    app.repo_list_state.loading = true;
+
+    app.handle_message(Message::RepositoriesLoaded(Err("error".into())));
+
+    assert!(!app.repo_list_state.loading);
+    assert_eq!(app.repo_list_state.items.len(), 0);
+}
+
+#[test]
+fn test_repo_list_up_event() {
+    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let repos = vec!["alpine".to_string(), "nginx".to_string()];
+    app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
+
+    // Start at first item
+    assert_eq!(app.repo_list_state.selected, 0);
+
+    // Navigate down
+    app.handle_event(Event::Down).unwrap();
+    assert_eq!(app.repo_list_state.selected, 1);
+
+    // Navigate back up
+    app.handle_event(Event::Up).unwrap();
+    assert_eq!(app.repo_list_state.selected, 0);
+}
+
+#[test]
+fn test_repo_list_down_event() {
+    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let repos = vec![
+        "alpine".to_string(),
+        "nginx".to_string(),
+        "redis".to_string(),
+    ];
+    app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
+
+    assert_eq!(app.repo_list_state.selected, 0);
+
+    app.handle_event(Event::Down).unwrap();
+    assert_eq!(app.repo_list_state.selected, 1);
+
+    app.handle_event(Event::Down).unwrap();
+    assert_eq!(app.repo_list_state.selected, 2);
+}
+
+#[test]
+fn test_repo_list_enter_navigates_to_tag_list() {
+    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let repos = vec!["alpine".to_string(), "nginx".to_string()];
+    app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
+
+    // Select first repository and press Enter
+    app.handle_event(Event::Enter).unwrap();
+
+    // Should navigate to tag list for alpine
+    assert_eq!(app.current_view, View::TagList("alpine".to_string()));
+    assert_eq!(app.view_stack.len(), 1);
+    assert_eq!(app.view_stack[0], View::RepositoryList);
+}
+
+#[test]
+fn test_repo_list_enter_on_empty_list_does_nothing() {
+    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+
+    // No repositories loaded
+    app.handle_event(Event::Enter).unwrap();
+
+    // Should stay on repository list
+    assert_eq!(app.current_view, View::RepositoryList);
+    assert_eq!(app.view_stack.len(), 0);
+}
+
+#[test]
+fn test_load_repositories_sets_loading_state() {
+    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+
+    assert!(!app.repo_list_state.loading);
+
+    app.load_repositories();
+
+    assert!(app.repo_list_state.loading);
+}
+
+#[test]
+fn test_repo_list_refresh_event() {
+    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+
+    app.handle_event(Event::Refresh).unwrap();
+
+    assert!(app.repo_list_state.loading);
+}

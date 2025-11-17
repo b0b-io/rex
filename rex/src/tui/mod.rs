@@ -17,7 +17,8 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io::{self, Stdout};
 use std::time::Duration;
 
-use events::{Event, EventHandler};
+use app::App;
+use events::EventHandler;
 use shell::{Action, Footer, ShellLayout, TitleBar};
 use theme::Theme;
 
@@ -48,7 +49,18 @@ pub fn run(ctx: &crate::context::AppContext) -> Result<()> {
     let registry = get_registry_url(&ctx.config)?;
 
     let title_bar = TitleBar::new().with_registry(registry.clone());
-    let footer = Footer::new(vec![Action::new("?", "Help"), Action::new("q", "Quit")]);
+    let footer = Footer::new(vec![
+        Action::new("↑↓", "Navigate"),
+        Action::new("Enter", "Select"),
+        Action::new("R", "Refresh"),
+        Action::new("q", "Quit"),
+    ]);
+
+    // Create app state
+    let mut app = App::new(registry, theme.clone(), ctx.config.tui.vim_mode);
+
+    // Load repositories on startup
+    app.load_repositories();
 
     // Create event handler with configured vim mode
     let event_handler = EventHandler::new(ctx.config.tui.vim_mode);
@@ -58,6 +70,9 @@ pub fn run(ctx: &crate::context::AppContext) -> Result<()> {
 
     // Main loop
     loop {
+        // Process any pending messages from workers
+        app.process_messages();
+
         terminal.draw(|f| {
             let area = f.size();
 
@@ -67,23 +82,29 @@ pub fn run(ctx: &crate::context::AppContext) -> Result<()> {
             // Render title bar
             title_bar.render(f, layout.title_bar, &theme);
 
-            // TODO: Render content area (will be implemented in later tasks)
+            // Render content based on current view
+            match &app.current_view {
+                app::View::RepositoryList => {
+                    app.repo_list_state.render(f, layout.content, &theme);
+                }
+                _ => {
+                    // TODO: Implement other views
+                }
+            }
 
             // Render footer
             footer.render(f, layout.footer, &theme);
         })?;
 
+        // Check if app wants to quit
+        if app.should_quit {
+            break;
+        }
+
         // Poll for events with configured interval
         if let Some(event) = event_handler.poll(poll_interval)? {
-            match event {
-                Event::Quit => break,
-                Event::Resize(_, _) => {
-                    // Terminal will automatically redraw on next iteration
-                }
-                _ => {
-                    // TODO: Handle other events when views are implemented
-                }
-            }
+            // Handle event through app
+            app.handle_event(event)?;
         }
     }
 

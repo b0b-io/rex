@@ -9,6 +9,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use super::Result;
 use super::events::Event;
 use super::theme::Theme;
+use super::views::repos::{RepositoryItem, RepositoryListState};
 
 /// Views in the application.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +62,10 @@ pub struct App {
     /// Tags for each repository (keyed by repository name)
     pub tags: HashMap<String, Vec<String>>,
 
+    // View states
+    /// State for the repository list view
+    pub repo_list_state: RepositoryListState,
+
     // Communication
     /// Sender for messages from workers
     tx: Sender<Message>,
@@ -102,6 +107,7 @@ impl App {
             current_registry: registry,
             repositories: vec![],
             tags: HashMap::new(),
+            repo_list_state: RepositoryListState::new(),
             tx,
             rx,
             theme,
@@ -175,8 +181,30 @@ impl App {
     /// # Errors
     ///
     /// Returns an error if event handling fails.
-    fn handle_repo_list_event(&mut self, _event: Event) -> Result<()> {
-        // TODO: Implement when repository list view is added
+    fn handle_repo_list_event(&mut self, event: Event) -> Result<()> {
+        match event {
+            Event::Up => {
+                self.repo_list_state.select_previous();
+            }
+            Event::Down => {
+                self.repo_list_state.select_next();
+            }
+            Event::Enter => {
+                // Navigate to tag list for selected repository
+                if let Some(item) = self.repo_list_state.selected_item() {
+                    let repo_name = item.name.clone();
+                    self.push_view(View::TagList(repo_name));
+                }
+            }
+            Event::Refresh => {
+                // Reload repositories
+                self.load_repositories();
+            }
+            Event::Search => {
+                // TODO: Implement search mode in Phase 4
+            }
+            _ => {}
+        }
         Ok(())
     }
 
@@ -295,9 +323,21 @@ impl App {
     fn handle_message(&mut self, msg: Message) {
         match msg {
             Message::RepositoriesLoaded(Ok(repos)) => {
-                self.repositories = repos;
+                self.repositories = repos.clone();
+                // Update repository list state with items
+                self.repo_list_state.items = repos
+                    .into_iter()
+                    .map(|name| RepositoryItem {
+                        name,
+                        tag_count: 0,       // TODO: Fetch actual tag count
+                        total_size: 0,      // TODO: Calculate actual total size
+                        last_updated: None, // TODO: Fetch actual last updated
+                    })
+                    .collect();
+                self.repo_list_state.loading = false;
             }
             Message::RepositoriesLoaded(Err(_)) => {
+                self.repo_list_state.loading = false;
                 // TODO: Show error banner
             }
             Message::TagsLoaded(repo, Ok(tags)) => {
@@ -347,6 +387,36 @@ impl App {
         std::thread::spawn(move || {
             let msg = f();
             let _ = tx.send(msg);
+        });
+    }
+
+    /// Load repositories from the registry in a background worker.
+    ///
+    /// Sets the loading state and spawns a worker to fetch the repository list.
+    /// When complete, the worker sends a `RepositoriesLoaded` message.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use rex::tui::app::App;
+    /// use rex::tui::theme::Theme;
+    ///
+    /// let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    /// app.load_repositories();
+    /// assert!(app.repo_list_state.loading);
+    /// ```
+    pub fn load_repositories(&mut self) {
+        self.repo_list_state.loading = true;
+        let _registry_url = self.current_registry.clone();
+
+        self.spawn_worker(move || {
+            // TODO: Use worker::fetch_repositories(_registry_url) when implemented
+            // For now, return a simple mock message
+            Message::RepositoriesLoaded(Ok(vec![
+                "alpine".to_string(),
+                "nginx".to_string(),
+                "redis".to_string(),
+            ]))
         });
     }
 }
