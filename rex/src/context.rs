@@ -73,6 +73,23 @@ impl AppContext {
         {
             config.concurrency = value;
         }
+        // TUI environment variables
+        if let Ok(theme) = env::var("REX_TUI_THEME") {
+            config.tui.theme = theme;
+        }
+        if let Ok(vim_mode) = env::var("REX_TUI_VIM_MODE") {
+            config.tui.vim_mode = vim_mode.parse().unwrap_or(config.tui.vim_mode);
+        }
+        if let Ok(max_workers) = env::var("REX_TUI_MAX_WORKERS")
+            && let Ok(value) = max_workers.parse::<usize>()
+        {
+            config.tui.max_workers = value;
+        }
+        if let Ok(poll_interval) = env::var("REX_TUI_POLL_INTERVAL")
+            && let Ok(value) = poll_interval.parse::<u64>()
+        {
+            config.tui.poll_interval = value;
+        }
 
         // 4. Apply CLI flag overrides (highest priority)
         // Only override if not Auto (which is the default from clap)

@@ -11,6 +11,9 @@ pub struct Config {
     /// Style configuration
     #[serde(default)]
     pub style: StyleConfig,
+    /// TUI configuration
+    #[serde(default)]
+    pub tui: TuiConfig,
     /// Registry configuration
     #[serde(default)]
     pub registries: RegistriesConfig,
@@ -26,6 +29,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             style: StyleConfig::default(),
+            tui: TuiConfig::default(),
             registries: RegistriesConfig::default(),
             cache_dir: default_cache_dir(),
             concurrency: default_concurrency(),
@@ -39,6 +43,50 @@ fn default_cache_dir() -> String {
 
 fn default_concurrency() -> usize {
     8
+}
+
+/// TUI configuration section
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TuiConfig {
+    /// Theme: "dark" or "light"
+    #[serde(default = "default_tui_theme")]
+    pub theme: String,
+    /// Enable vim-style navigation (hjkl)
+    #[serde(default = "default_tui_vim_mode")]
+    pub vim_mode: bool,
+    /// Maximum concurrent worker threads
+    #[serde(default = "default_tui_max_workers")]
+    pub max_workers: usize,
+    /// Event polling interval in milliseconds
+    #[serde(default = "default_tui_poll_interval")]
+    pub poll_interval: u64,
+}
+
+fn default_tui_theme() -> String {
+    "dark".to_string()
+}
+
+fn default_tui_vim_mode() -> bool {
+    false
+}
+
+fn default_tui_max_workers() -> usize {
+    10
+}
+
+fn default_tui_poll_interval() -> u64 {
+    100
+}
+
+impl Default for TuiConfig {
+    fn default() -> Self {
+        Self {
+            theme: default_tui_theme(),
+            vim_mode: default_tui_vim_mode(),
+            max_workers: default_tui_max_workers(),
+            poll_interval: default_tui_poll_interval(),
+        }
+    }
 }
 
 /// Style configuration section
@@ -157,6 +205,10 @@ pub fn get_config_value(config_path: &PathBuf, key: &str) -> Result<String, Stri
             OutputFormat::Yaml => "yaml".to_string(),
         }),
         ["style", "color"] => Ok(config.style.color.to_string()),
+        ["tui", "theme"] => Ok(config.tui.theme.clone()),
+        ["tui", "vim_mode"] => Ok(config.tui.vim_mode.to_string()),
+        ["tui", "max_workers"] => Ok(config.tui.max_workers.to_string()),
+        ["tui", "poll_interval"] => Ok(config.tui.poll_interval.to_string()),
         ["cache_dir"] => Ok(config.cache_dir.clone()),
         ["concurrency"] => Ok(config.concurrency.to_string()),
         _ => Err(format!("Unknown config key: {}", key)),
@@ -180,6 +232,30 @@ pub fn set_config_value(config_path: &PathBuf, key: &str, value: &str) -> Result
         }
         ["style", "color"] => {
             config.style.color = ColorChoice::from(value);
+        }
+        ["tui", "theme"] => {
+            config.tui.theme = value.to_string();
+        }
+        ["tui", "vim_mode"] => {
+            config.tui.vim_mode = value.parse::<bool>().map_err(|_| {
+                format!("Invalid vim_mode value '{}': must be true or false", value)
+            })?;
+        }
+        ["tui", "max_workers"] => {
+            config.tui.max_workers = value.parse::<usize>().map_err(|_| {
+                format!(
+                    "Invalid max_workers value '{}': must be a positive integer",
+                    value
+                )
+            })?;
+        }
+        ["tui", "poll_interval"] => {
+            config.tui.poll_interval = value.parse::<u64>().map_err(|_| {
+                format!(
+                    "Invalid poll_interval value '{}': must be a positive integer",
+                    value
+                )
+            })?;
         }
         ["cache_dir"] => {
             config.cache_dir = value.to_string();
