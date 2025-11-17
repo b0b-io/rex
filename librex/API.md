@@ -14,16 +14,15 @@ Rex provides a simple, well-documented API for interacting with OCI registries. 
 ```rust
 use librex::Rex;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to a registry
-    let mut rex = Rex::connect("http://localhost:5000").await?;
+    let mut rex = Rex::connect("http://localhost:5000")?;
 
     // List repositories
-    let repos = rex.list_repositories().await?;
+    let repos = rex.list_repositories()?;
 
     // Search repositories
-    let results = rex.search_repositories("alpine").await?;
+    let results = rex.search_repositories("alpine")?;
 
     Ok(())
 }
@@ -68,8 +67,7 @@ Builder for advanced configuration with caching, authentication, etc.
 let mut rex = Rex::builder()
     .registry_url("http://localhost:5000")
     .with_cache("/tmp/rex-cache")
-    .build()
-    .await?;
+    .build()?;
 ```
 
 ### `SearchResult`
