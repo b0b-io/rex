@@ -36,9 +36,8 @@
 //! ```
 
 use crate::auth::Credentials;
-use crate::cache::Cache;
+use crate::cache::{Cache, CacheTtl};
 use crate::client::Client;
-use crate::config::Config;
 use crate::digest::Digest;
 use crate::error::Result;
 use crate::oci::ManifestOrIndex;
@@ -699,7 +698,6 @@ impl Rex {
 ///     let mut rex = Rex::builder()
 ///         .registry_url("http://localhost:5000")
 ///         .with_cache("/tmp/rex-cache")
-///         .with_config_file("./config.toml")
 ///         .build()
 ///         ?;
 ///     Ok(())
@@ -708,7 +706,8 @@ impl Rex {
 pub struct RexBuilder {
     registry_url: Option<String>,
     cache_dir: Option<PathBuf>,
-    config: Option<Config>,
+    cache_ttl: Option<CacheTtl>,
+    memory_capacity: Option<usize>,
     credentials: Option<Credentials>,
 }
 
@@ -718,7 +717,8 @@ impl RexBuilder {
         Self {
             registry_url: None,
             cache_dir: None,
-            config: None,
+            cache_ttl: None,
+            memory_capacity: None,
             credentials: None,
         }
     }
@@ -735,20 +735,15 @@ impl RexBuilder {
         self
     }
 
-    /// Load configuration from a file.
-    pub fn with_config_file(mut self, path: impl Into<PathBuf>) -> Self {
-        // Load config from file
-        if let Ok(content) = std::fs::read_to_string(path.into())
-            && let Ok(config) = Config::from_yaml_str(&content)
-        {
-            self.config = Some(config);
-        }
+    /// Set cache TTL (time-to-live) configuration.
+    pub fn with_cache_ttl(mut self, ttl: CacheTtl) -> Self {
+        self.cache_ttl = Some(ttl);
         self
     }
 
-    /// Set configuration directly.
-    pub fn with_config(mut self, config: Config) -> Self {
-        self.config = Some(config);
+    /// Set memory cache capacity (number of entries).
+    pub fn with_memory_capacity(mut self, capacity: usize) -> Self {
+        self.memory_capacity = Some(capacity);
         self
     }
 
@@ -768,9 +763,9 @@ impl RexBuilder {
 
         // Create cache if specified
         let cache = if let Some(cache_dir) = self.cache_dir {
-            let config = self.config.unwrap_or_default();
-            let capacity = NonZeroUsize::new(config.cache.limits.memory_entries).unwrap();
-            Some(Cache::new(cache_dir, config.cache.ttl, capacity))
+            let ttl = self.cache_ttl.unwrap_or_default();
+            let capacity = NonZeroUsize::new(self.memory_capacity.unwrap_or(100)).unwrap();
+            Some(Cache::new(cache_dir, ttl, capacity))
         } else {
             None
         };

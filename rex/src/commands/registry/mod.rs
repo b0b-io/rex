@@ -701,7 +701,7 @@ pub fn cache_stats(config_path: &PathBuf, name: Option<&str>) -> Result<CacheSta
     // Create a temporary cache instance to get stats
     let cache = librex::cache::Cache::new(
         cache_dir.clone(),
-        librex::config::CacheTtl::default(),
+        librex::cache::CacheTtl::default(),
         std::num::NonZeroUsize::new(100).unwrap(),
     );
 
@@ -743,7 +743,7 @@ pub fn cache_clear(
             let cache_dir = config::get_registry_cache_dir(&registry.url).unwrap();
             let mut cache = librex::cache::Cache::new(
                 cache_dir,
-                librex::config::CacheTtl::default(),
+                librex::cache::CacheTtl::default(),
                 std::num::NonZeroUsize::new(100).unwrap(),
             );
             let stats = cache
@@ -789,7 +789,7 @@ pub fn cache_clear(
     let cache_dir = config::get_registry_cache_dir(&registry.url).unwrap();
     let mut cache = librex::cache::Cache::new(
         cache_dir,
-        librex::config::CacheTtl::default(),
+        librex::cache::CacheTtl::default(),
         std::num::NonZeroUsize::new(100).unwrap(),
     );
 
@@ -815,7 +815,7 @@ pub fn cache_prune(
             let cache_dir = config::get_registry_cache_dir(&registry.url).unwrap();
             let cache = librex::cache::Cache::new(
                 cache_dir,
-                librex::config::CacheTtl::default(),
+                librex::cache::CacheTtl::default(),
                 std::num::NonZeroUsize::new(100).unwrap(),
             );
 
@@ -863,7 +863,7 @@ pub fn cache_prune(
     let cache_dir = config::get_registry_cache_dir(&registry.url).unwrap();
     let cache = librex::cache::Cache::new(
         cache_dir,
-        librex::config::CacheTtl::default(),
+        librex::cache::CacheTtl::default(),
         std::num::NonZeroUsize::new(100).unwrap(),
     );
 
@@ -1112,7 +1112,7 @@ fn sync_single_registry(
     // Get final cache size
     let cache = librex::cache::Cache::new(
         cache_dir,
-        librex::config::CacheTtl::default(),
+        librex::cache::CacheTtl::default(),
         std::num::NonZeroUsize::new(100).unwrap(),
     );
     let cache_stats = cache

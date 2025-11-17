@@ -3,7 +3,6 @@
 //! This module provides a cache that serves as a fast local data source
 //! for the `registry` module, reducing network requests.
 
-use crate::config::CacheTtl;
 use crate::error::{Result, RexError};
 use bincode::{Decode, Encode, config::standard};
 use lru::LruCache;
@@ -15,6 +14,31 @@ use walkdir::WalkDir;
 
 #[cfg(test)]
 mod tests;
+
+/// Cache TTL configuration.
+/// This struct configures how long different types of data should be cached.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CacheTtl {
+    /// TTL for catalog data in seconds
+    pub catalog: u64,
+    /// TTL for tags data in seconds
+    pub tags: u64,
+    /// TTL for manifest data in seconds
+    pub manifest: u64,
+    /// TTL for config data in seconds
+    pub config: u64,
+}
+
+impl Default for CacheTtl {
+    fn default() -> Self {
+        Self {
+            catalog: 3600,  // 1 hour
+            tags: 1800,     // 30 minutes
+            manifest: 7200, // 2 hours
+            config: 3600,   // 1 hour
+        }
+    }
+}
 
 /// The type of data being cached, used to determine the correct TTL.
 #[derive(Clone, Copy)]
