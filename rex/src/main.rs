@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod context;
 mod format;
+mod tui;
 
 /// Rex - Container Registry Explorer
 ///
@@ -60,6 +61,8 @@ enum Commands {
         #[arg(value_enum)]
         shell: clap_complete::Shell,
     },
+    /// Launch interactive TUI mode
+    Tui,
 }
 
 #[derive(Subcommand, Debug)]
@@ -443,6 +446,12 @@ fn main() {
             let mut cmd = Cli::command();
             let bin_name = cmd.get_name().to_string();
             clap_complete::generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
+        }
+        Commands::Tui => {
+            if let Err(e) = tui::run() {
+                eprintln!("TUI error: {}", e);
+                std::process::exit(1);
+            }
         }
     }
 }
