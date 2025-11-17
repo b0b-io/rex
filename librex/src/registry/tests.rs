@@ -1,7 +1,6 @@
 use super::*;
-use crate::cache::Cache;
+use crate::cache::{Cache, CacheTtl};
 use crate::client::Client;
-use crate::config::Config;
 use std::num::NonZeroUsize;
 use tempfile::tempdir;
 
@@ -18,9 +17,9 @@ fn test_registry_new() {
 fn test_registry_new_with_cache() {
     let client = Client::new("http://localhost:5000", None).unwrap();
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let registry = Registry::new(client, Some(cache), None);
 
@@ -257,9 +256,9 @@ fn test_delete_manifest_invalidates_cache() {
     // We can't test the HTTP DELETE without a running registry, but we can test cache invalidation
 
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     // Manually populate cache with a manifest entry
     let repository = "alpine";
@@ -295,9 +294,9 @@ fn test_delete_tag_invalidates_multiple_cache_entries() {
     // Verify that delete_tag would invalidate all the correct cache keys
 
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let repository = "alpine";
     let tag = "latest";
@@ -340,9 +339,9 @@ fn test_delete_all_tags_invalidates_tags_list_cache() {
     // Verify that delete_all_tags invalidates the tags list cache
 
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let repository = "alpine";
     let tags_list_key = format!("{}/_tags", repository);
@@ -369,9 +368,9 @@ fn test_cache_delete_nonexistent_key_is_safe() {
     // Verify that deleting a non-existent cache key doesn't cause errors
 
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     // Try to delete a key that doesn't exist
     let result = cache.delete("nonexistent/key");
@@ -403,7 +402,7 @@ fn test_list_repositories_without_cache() {
 
 #[test]
 fn test_list_repositories_with_cache() {
-    use crate::config::Config;
+    use crate::cache::CacheTtl;
     use std::num::NonZeroUsize;
     use tempfile::TempDir;
 
@@ -416,9 +415,9 @@ fn test_list_repositories_with_cache() {
         .create();
 
     let temp_dir = TempDir::new().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let client = Client::new(&server.url(), None).unwrap();
     let mut registry = Registry::new(client, Some(cache), None);
@@ -458,7 +457,7 @@ fn test_list_tags_without_cache() {
 
 #[test]
 fn test_list_tags_with_cache() {
-    use crate::config::Config;
+    use crate::cache::CacheTtl;
     use std::num::NonZeroUsize;
     use tempfile::TempDir;
 
@@ -471,9 +470,9 @@ fn test_list_tags_with_cache() {
         .create();
 
     let temp_dir = TempDir::new().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let client = Client::new(&server.url(), None).unwrap();
     let mut registry = Registry::new(client, Some(cache), None);
@@ -526,7 +525,7 @@ fn test_get_manifest_without_cache() {
 
 #[test]
 fn test_get_manifest_with_cache() {
-    use crate::config::Config;
+    use crate::cache::CacheTtl;
     use std::num::NonZeroUsize;
     use std::str::FromStr;
     use tempfile::TempDir;
@@ -544,9 +543,9 @@ fn test_get_manifest_with_cache() {
         .create();
 
     let temp_dir = TempDir::new().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let client = Client::new(&server.url(), None).unwrap();
     let mut registry = Registry::new(client, Some(cache), None);
@@ -606,7 +605,7 @@ fn test_get_blob_without_cache() {
 
 #[test]
 fn test_get_blob_with_cache() {
-    use crate::config::Config;
+    use crate::cache::CacheTtl;
     use sha2::{Digest as Sha2Digest, Sha256};
     use std::num::NonZeroUsize;
     use std::str::FromStr;
@@ -629,9 +628,9 @@ fn test_get_blob_with_cache() {
         .create();
 
     let temp_dir = TempDir::new().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let client = Client::new(&server.url(), None).unwrap();
     let mut registry = Registry::new(client, Some(cache), None);

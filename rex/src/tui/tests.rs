@@ -28,5 +28,5 @@ fn test_restore_terminal_accepts_terminal() {
 #[test]
 fn test_run_function_exists() {
     // Verify run function exists with correct signature
-    let _: fn() -> Result<()> = run;
+    let _: fn(&crate::context::AppContext) -> Result<()> = run;
 }

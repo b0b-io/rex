@@ -1,5 +1,4 @@
 use super::*;
-use crate::config::Config;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 use tempfile::tempdir;
@@ -7,25 +6,21 @@ use tempfile::tempdir;
 #[test]
 fn test_cache_new() {
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let cache = Cache::new(
-        temp_dir.path().to_path_buf(),
-        config.cache.ttl.clone(),
-        capacity,
-    );
+    let cache = Cache::new(temp_dir.path().to_path_buf(), ttl.clone(), capacity);
 
     assert_eq!(cache.memory.cap(), capacity);
     assert_eq!(cache.disk_path, temp_dir.path());
-    assert_eq!(cache.ttl_config, config.cache.ttl);
+    assert_eq!(cache.ttl_config, ttl);
 }
 
 #[test]
 fn test_cache_l1_get_and_set() {
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let key = "my-key";
     let data = "my-data".to_string();
@@ -45,9 +40,9 @@ fn test_cache_l1_get_and_set() {
 #[test]
 fn test_cache_l2_disk_hit() {
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let key = "my-key";
     let data = "my-data-on-disk".to_string();
@@ -68,14 +63,10 @@ fn test_cache_l2_disk_hit() {
 #[test]
 fn test_cache_l2_disk_expired() {
     let temp_dir = tempdir().unwrap();
-    let mut config = Config::default();
-    config.cache.ttl.tags = 1; // Set a 1-second TTL for tags
+    let mut ttl = CacheTtl::default();
+    ttl.tags = 1; // Set a 1-second TTL for tags
     let capacity = NonZeroUsize::new(100).unwrap();
-    let mut cache = Cache::new(
-        temp_dir.path().to_path_buf(),
-        config.cache.ttl.clone(),
-        capacity,
-    );
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let key = "my-key";
     let data = "my-expired-data".to_string();
@@ -101,15 +92,11 @@ fn test_cache_l2_disk_expired() {
 #[test]
 fn test_cache_prune() {
     let temp_dir = tempdir().unwrap();
-    let mut config = Config::default();
-    config.cache.ttl.tags = 1; // 1 second TTL
-    config.cache.ttl.catalog = 3600; // 1 hour TTL
+    let mut ttl = CacheTtl::default();
+    ttl.tags = 1; // 1 second TTL
+    ttl.catalog = 3600; // 1 hour TTL
     let capacity = NonZeroUsize::new(100).unwrap();
-    let mut cache = Cache::new(
-        temp_dir.path().to_path_buf(),
-        config.cache.ttl.clone(),
-        capacity,
-    );
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     // Create one entry that will expire
     let expired_key = "expired-key";
@@ -147,9 +134,9 @@ fn test_cache_prune() {
 #[test]
 fn test_cache_clear() {
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     // Add multiple entries
     cache
@@ -190,9 +177,9 @@ fn test_cache_clear() {
 #[test]
 fn test_cache_stats() {
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     // Initially empty
     let stats = cache.stats().unwrap();
@@ -230,9 +217,9 @@ fn test_cache_stats() {
 #[test]
 fn test_cache_clear_empty() {
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let mut cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let mut cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     // Clear empty cache should not fail
     let stats = cache.clear().unwrap();
@@ -243,9 +230,9 @@ fn test_cache_clear_empty() {
 #[test]
 fn test_cache_stats_empty() {
     let temp_dir = tempdir().unwrap();
-    let config = Config::default();
+    let ttl = CacheTtl::default();
     let capacity = NonZeroUsize::new(100).unwrap();
-    let cache = Cache::new(temp_dir.path().to_path_buf(), config.cache.ttl, capacity);
+    let cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     // Stats for empty cache
     let stats = cache.stats().unwrap();
