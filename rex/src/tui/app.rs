@@ -4,7 +4,11 @@
 //! the UI thread and background workers.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
+
+use librex::Credentials;
+use librex::auth::CredentialStore;
 
 use super::Result;
 use super::events::Event;
@@ -56,6 +60,10 @@ pub struct App {
     // Registry
     /// Current registry URL
     pub current_registry: String,
+    /// Cache directory for registry data
+    pub cache_dir: PathBuf,
+    /// Optional credentials for authentication
+    pub credentials: Option<Credentials>,
 
     // Data (cached)
     /// List of repositories
@@ -82,30 +90,69 @@ pub struct App {
 
 #[allow(dead_code)] // TODO: Remove when integrated into main TUI loop
 impl App {
-    /// Create a new application state.
+    /// Create a new application state from the application context.
+    ///
+    /// Extracts registry configuration, cache directory, credentials, theme,
+    /// and other settings from the provided context.
     ///
     /// # Arguments
     ///
-    /// * `registry` - The registry URL to connect to
-    /// * `theme` - The theme to use for styling
-    /// * `vim_mode` - Whether vim mode navigation is enabled
+    /// * `ctx` - The application context with configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if registry configuration cannot be determined or
+    /// cache directory cannot be created.
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
+    /// use rex::context::AppContext;
     /// use rex::tui::app::App;
-    /// use rex::tui::theme::Theme;
     ///
-    /// let app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    /// let ctx = AppContext::build(
+    ///     rex::format::ColorChoice::Auto,
+    ///     rex::context::VerbosityLevel::Normal
+    /// );
+    /// let app = App::new(&ctx).unwrap();
     /// ```
-    pub fn new(registry: String, theme: Theme, vim_mode: bool) -> Self {
+    pub fn new(ctx: &crate::context::AppContext) -> Result<Self> {
         let (tx, rx) = channel();
 
-        Self {
+        // Get registry URL from config
+        let registry = get_registry_url(&ctx.config)?;
+
+        // Get cache directory for this registry
+        let cache_dir = crate::config::get_registry_cache_dir(&registry)?;
+
+        // Load credentials if available
+        let creds_path = crate::config::get_credentials_path();
+        let credentials = if creds_path.exists() {
+            if let Ok(store) = librex::auth::FileCredentialStore::new(creds_path) {
+                store.get(&registry).ok().flatten()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Get theme from config
+        let theme = match ctx.config.tui.theme.as_str() {
+            "light" => Theme::light(),
+            _ => Theme::dark(), // Default to dark
+        };
+
+        // Get vim mode setting
+        let vim_mode = ctx.config.tui.vim_mode;
+
+        Ok(Self {
             current_view: View::RepositoryList,
             view_stack: vec![],
             should_quit: false,
             current_registry: registry,
+            cache_dir,
+            credentials,
             repositories: vec![],
             tags: HashMap::new(),
             repo_list_state: RepositoryListState::new(),
@@ -113,7 +160,7 @@ impl App {
             rx,
             theme,
             vim_mode,
-        }
+        })
     }
 
     /// Handle an event from the user.
@@ -399,23 +446,54 @@ impl App {
     /// # Examples
     ///
     /// ```no_run
+    /// use std::path::PathBuf;
     /// use rex::tui::app::App;
     /// use rex::tui::theme::Theme;
     ///
-    /// let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    /// let mut app = App::new(
+    ///     "localhost:5000".to_string(),
+    ///     PathBuf::from("/tmp/cache"),
+    ///     None,
+    ///     Theme::dark(),
+    ///     false
+    /// );
     /// app.load_repositories();
     /// assert!(app.repo_list_state.loading);
     /// ```
     pub fn load_repositories(&mut self) {
         self.repo_list_state.loading = true;
         let registry_url = self.current_registry.clone();
+        let cache_dir = self.cache_dir.clone();
+        let credentials = self.credentials.clone();
         let tx = self.tx.clone();
 
         // Spawn worker thread to fetch repositories
         std::thread::spawn(move || {
-            worker::fetch_repositories(registry_url, tx);
+            worker::fetch_repositories(registry_url, &cache_dir, credentials, tx);
         });
     }
+}
+
+/// Get registry URL from config.
+///
+/// Returns the default registry from config, or falls back to localhost:5000.
+fn get_registry_url(config: &crate::config::Config) -> Result<String> {
+    // Use default registry from config
+    if let Some(default_name) = &config.registries.default {
+        for entry in &config.registries.list {
+            if entry.name == *default_name {
+                return Ok(entry.url.clone());
+            }
+        }
+    }
+
+    // Fallback to first registry if available
+    if let Some(first) = config.registries.list.first() {
+        return Ok(first.url.clone());
+    }
+
+    // Fallback to localhost
+    Ok("localhost:5000".to_string())
 }
 
 #[cfg(test)]

@@ -1,26 +1,37 @@
 //! Tests for the app module.
 
 use super::*;
+use crate::context::AppContext;
+use crate::context::VerbosityLevel;
+use crate::format::ColorChoice;
 use crate::tui::events::Event;
-use crate::tui::theme::Theme;
+
+/// Helper to create a test AppContext with default settings
+fn create_test_context() -> AppContext {
+    AppContext::build(ColorChoice::Never, VerbosityLevel::Normal)
+}
 
 #[test]
 fn test_app_new() {
-    let app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let ctx = create_test_context();
+    let app = App::new(&ctx).unwrap();
 
     assert_eq!(app.current_view, View::RepositoryList);
     assert!(app.view_stack.is_empty());
     assert!(!app.should_quit);
-    assert_eq!(app.current_registry, "localhost:5000");
     assert!(app.repositories.is_empty());
     assert!(app.tags.is_empty());
-    assert!(!app.vim_mode);
 }
 
 #[test]
-fn test_app_new_with_vim_mode() {
-    let app = App::new("localhost:5000".to_string(), Theme::dark(), true);
-    assert!(app.vim_mode);
+fn test_app_new_extracts_settings() {
+    let ctx = create_test_context();
+    let app = App::new(&ctx).unwrap();
+
+    // Should extract vim_mode from config
+    assert_eq!(app.vim_mode, ctx.config.tui.vim_mode);
+    // Should have a cache directory
+    assert!(!app.cache_dir.as_os_str().is_empty());
 }
 
 // View enum tests
@@ -69,7 +80,7 @@ fn test_view_debug() {
 
 #[test]
 fn test_push_view() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     assert_eq!(app.current_view, View::RepositoryList);
     assert_eq!(app.view_stack.len(), 0);
@@ -83,7 +94,7 @@ fn test_push_view() {
 
 #[test]
 fn test_push_multiple_views() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     app.push_view(View::TagList("alpine".to_string()));
     app.push_view(View::ImageDetails(
@@ -102,7 +113,7 @@ fn test_push_multiple_views() {
 
 #[test]
 fn test_pop_view() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     app.push_view(View::TagList("alpine".to_string()));
     app.push_view(View::ImageDetails(
@@ -118,7 +129,7 @@ fn test_pop_view() {
 
 #[test]
 fn test_pop_view_to_root() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     app.push_view(View::TagList("alpine".to_string()));
     app.pop_view();
@@ -129,7 +140,7 @@ fn test_pop_view_to_root() {
 
 #[test]
 fn test_pop_view_when_empty() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     // Popping when already at root should do nothing
     app.pop_view();
@@ -142,7 +153,7 @@ fn test_pop_view_when_empty() {
 
 #[test]
 fn test_handle_quit_at_root_sets_should_quit() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     assert!(!app.should_quit);
 
@@ -153,7 +164,7 @@ fn test_handle_quit_at_root_sets_should_quit() {
 
 #[test]
 fn test_handle_quit_in_nested_view_goes_back() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     app.push_view(View::TagList("alpine".to_string()));
     assert_eq!(app.current_view, View::TagList("alpine".to_string()));
@@ -167,7 +178,7 @@ fn test_handle_quit_in_nested_view_goes_back() {
 
 #[test]
 fn test_handle_back_event() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     app.push_view(View::TagList("alpine".to_string()));
     app.handle_event(Event::Back).unwrap();
@@ -177,7 +188,7 @@ fn test_handle_back_event() {
 
 #[test]
 fn test_handle_back_at_root_does_nothing() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     app.handle_event(Event::Back).unwrap();
 
@@ -187,7 +198,7 @@ fn test_handle_back_at_root_does_nothing() {
 
 #[test]
 fn test_handle_resize_event() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     // Resize should not cause an error
     app.handle_event(Event::Resize(100, 50)).unwrap();
@@ -201,7 +212,7 @@ fn test_handle_resize_event() {
 
 #[test]
 fn test_handle_repositories_loaded_success() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     let repos = vec!["alpine".to_string(), "nginx".to_string()];
     app.handle_message(Message::RepositoriesLoaded(Ok(repos.clone())));
@@ -211,7 +222,7 @@ fn test_handle_repositories_loaded_success() {
 
 #[test]
 fn test_handle_repositories_loaded_error() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     let error = Err("Connection failed".into());
     app.handle_message(Message::RepositoriesLoaded(error));
@@ -222,7 +233,7 @@ fn test_handle_repositories_loaded_error() {
 
 #[test]
 fn test_handle_tags_loaded_success() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     let tags = vec!["latest".to_string(), "3.19".to_string()];
     app.handle_message(Message::TagsLoaded("alpine".to_string(), Ok(tags.clone())));
@@ -232,7 +243,7 @@ fn test_handle_tags_loaded_success() {
 
 #[test]
 fn test_handle_tags_loaded_error() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     let error = Err("Not found".into());
     app.handle_message(Message::TagsLoaded("alpine".to_string(), error));
@@ -242,7 +253,7 @@ fn test_handle_tags_loaded_error() {
 
 #[test]
 fn test_handle_tags_for_multiple_repositories() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     let alpine_tags = vec!["latest".to_string(), "3.19".to_string()];
     let nginx_tags = vec!["latest".to_string(), "alpine".to_string()];
@@ -262,7 +273,7 @@ fn test_handle_tags_for_multiple_repositories() {
 
 #[test]
 fn test_process_messages_drains_queue() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     // Simulate worker sending messages
     let tx = app.tx.clone();
@@ -285,7 +296,7 @@ fn test_process_messages_drains_queue() {
 
 #[test]
 fn test_spawn_worker() {
-    let app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let app = App::new(&create_test_context()).unwrap();
 
     // Spawn a worker that sends a message
     app.spawn_worker(|| Message::RepositoriesLoaded(Ok(vec!["test".to_string()])));
@@ -299,7 +310,7 @@ fn test_spawn_worker() {
 
 #[test]
 fn test_spawn_multiple_workers() {
-    let app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let app = App::new(&create_test_context()).unwrap();
 
     for i in 0..5 {
         let repo = format!("repo{}", i);
@@ -314,7 +325,7 @@ fn test_spawn_multiple_workers() {
 
 #[test]
 fn test_full_navigation_flow() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     // Start at repository list
     assert_eq!(app.current_view, View::RepositoryList);
@@ -350,7 +361,7 @@ fn test_full_navigation_flow() {
 
 #[test]
 fn test_repo_list_state_initialized() {
-    let app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let app = App::new(&create_test_context()).unwrap();
 
     assert_eq!(app.repo_list_state.items.len(), 0);
     assert_eq!(app.repo_list_state.selected, 0);
@@ -359,7 +370,7 @@ fn test_repo_list_state_initialized() {
 
 #[test]
 fn test_handle_repositories_loaded_populates_repo_list_state() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
     app.repo_list_state.loading = true;
 
     let repos = vec!["alpine".to_string(), "nginx".to_string()];
@@ -373,7 +384,7 @@ fn test_handle_repositories_loaded_populates_repo_list_state() {
 
 #[test]
 fn test_handle_repositories_loaded_error_clears_loading() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
     app.repo_list_state.loading = true;
 
     app.handle_message(Message::RepositoriesLoaded(Err("error".into())));
@@ -384,7 +395,7 @@ fn test_handle_repositories_loaded_error_clears_loading() {
 
 #[test]
 fn test_repo_list_up_event() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
     let repos = vec!["alpine".to_string(), "nginx".to_string()];
     app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
 
@@ -402,7 +413,7 @@ fn test_repo_list_up_event() {
 
 #[test]
 fn test_repo_list_down_event() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
     let repos = vec![
         "alpine".to_string(),
         "nginx".to_string(),
@@ -421,7 +432,7 @@ fn test_repo_list_down_event() {
 
 #[test]
 fn test_repo_list_enter_navigates_to_tag_list() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
     let repos = vec!["alpine".to_string(), "nginx".to_string()];
     app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
 
@@ -436,7 +447,7 @@ fn test_repo_list_enter_navigates_to_tag_list() {
 
 #[test]
 fn test_repo_list_enter_on_empty_list_does_nothing() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     // No repositories loaded
     app.handle_event(Event::Enter).unwrap();
@@ -448,7 +459,7 @@ fn test_repo_list_enter_on_empty_list_does_nothing() {
 
 #[test]
 fn test_load_repositories_sets_loading_state() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     assert!(!app.repo_list_state.loading);
 
@@ -459,7 +470,7 @@ fn test_load_repositories_sets_loading_state() {
 
 #[test]
 fn test_repo_list_refresh_event() {
-    let mut app = App::new("localhost:5000".to_string(), Theme::dark(), false);
+    let mut app = App::new(&create_test_context()).unwrap();
 
     app.handle_event(Event::Refresh).unwrap();
 

@@ -1,8 +1,14 @@
 //! Tests for the worker module.
 
 use super::*;
+use std::path::Path;
 use std::sync::mpsc::channel;
 use std::time::Duration;
+
+// Helper for test cache directory
+fn test_cache_dir() -> &'static Path {
+    Path::new("/tmp/rex-test-cache")
+}
 
 // Note: These tests verify the worker function signatures and message passing.
 // Full integration tests with actual registry connections are done separately.
@@ -13,7 +19,7 @@ fn test_fetch_repositories_sends_message() {
 
     // Spawn in a thread to test async behavior
     let handle = std::thread::spawn(move || {
-        fetch_repositories("invalid-url".to_string(), tx);
+        fetch_repositories("invalid-url".to_string(), test_cache_dir(), None, tx);
     });
 
     // Wait for worker to complete
@@ -36,7 +42,13 @@ fn test_fetch_tags_sends_message() {
     let (tx, rx) = channel();
 
     let handle = std::thread::spawn(move || {
-        fetch_tags("invalid-url".to_string(), "alpine".to_string(), tx);
+        fetch_tags(
+            "invalid-url".to_string(),
+            "alpine".to_string(),
+            test_cache_dir(),
+            None,
+            tx,
+        );
     });
 
     handle.join().unwrap();
@@ -61,6 +73,8 @@ fn test_fetch_manifest_sends_message() {
             "invalid-url".to_string(),
             "alpine".to_string(),
             "latest".to_string(),
+            test_cache_dir(),
+            None,
             tx,
         );
     });
@@ -83,7 +97,12 @@ fn test_fetch_manifest_sends_message() {
 fn test_fetch_repositories_handles_connection_error() {
     let (tx, rx) = channel();
 
-    fetch_repositories("http://nonexistent.invalid:9999".to_string(), tx);
+    fetch_repositories(
+        "http://nonexistent.invalid:9999".to_string(),
+        test_cache_dir(),
+        None,
+        tx,
+    );
 
     let msg = rx.recv_timeout(Duration::from_secs(2));
     assert!(msg.is_ok());
@@ -103,6 +122,8 @@ fn test_fetch_tags_handles_connection_error() {
     fetch_tags(
         "http://nonexistent.invalid:9999".to_string(),
         "alpine".to_string(),
+        test_cache_dir(),
+        None,
         tx,
     );
 
@@ -125,6 +146,8 @@ fn test_fetch_manifest_handles_connection_error() {
         "http://nonexistent.invalid:9999".to_string(),
         "alpine".to_string(),
         "latest".to_string(),
+        test_cache_dir(),
+        None,
         tx,
     );
 
@@ -150,11 +173,22 @@ fn test_multiple_workers_can_run_concurrently() {
     let tx3 = tx;
 
     let h1 = std::thread::spawn(move || {
-        fetch_repositories("http://invalid1.test".to_string(), tx1);
+        fetch_repositories(
+            "http://invalid1.test".to_string(),
+            test_cache_dir(),
+            None,
+            tx1,
+        );
     });
 
     let h2 = std::thread::spawn(move || {
-        fetch_tags("http://invalid2.test".to_string(), "repo1".to_string(), tx2);
+        fetch_tags(
+            "http://invalid2.test".to_string(),
+            "repo1".to_string(),
+            test_cache_dir(),
+            None,
+            tx2,
+        );
     });
 
     let h3 = std::thread::spawn(move || {
@@ -162,6 +196,8 @@ fn test_multiple_workers_can_run_concurrently() {
             "http://invalid3.test".to_string(),
             "repo2".to_string(),
             "tag1".to_string(),
+            test_cache_dir(),
+            None,
             tx3,
         );
     });
@@ -185,7 +221,12 @@ fn test_worker_thread_exits_after_completion() {
     let (tx, rx) = channel();
 
     let handle = std::thread::spawn(move || {
-        fetch_repositories("http://invalid.test".to_string(), tx);
+        fetch_repositories(
+            "http://invalid.test".to_string(),
+            test_cache_dir(),
+            None,
+            tx,
+        );
         // Thread should exit here
     });
 

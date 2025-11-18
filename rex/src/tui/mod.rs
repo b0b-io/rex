@@ -20,7 +20,6 @@ use std::time::Duration;
 use app::App;
 use events::EventHandler;
 use shell::{Action, Footer, ShellLayout, TitleBar};
-use theme::Theme;
 
 /// Result type for TUI operations.
 ///
@@ -39,25 +38,16 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + S
 pub fn run(ctx: &crate::context::AppContext) -> Result<()> {
     let mut terminal = setup_terminal()?;
 
-    // Get theme from config
-    let theme = match ctx.config.tui.theme.as_str() {
-        "light" => Theme::light(),
-        _ => Theme::dark(), // Default to dark
-    };
+    // Create app state from context (extracts registry, cache, credentials, theme, etc.)
+    let mut app = App::new(ctx)?;
 
-    // Get registry from config
-    let registry = get_registry_url(&ctx.config)?;
-
-    let title_bar = TitleBar::new().with_registry(registry.clone());
+    let title_bar = TitleBar::new().with_registry(app.current_registry.clone());
     let footer = Footer::new(vec![
         Action::new("↑↓", "Navigate"),
         Action::new("Enter", "Select"),
         Action::new("R", "Refresh"),
         Action::new("q", "Quit"),
     ]);
-
-    // Create app state
-    let mut app = App::new(registry, theme.clone(), ctx.config.tui.vim_mode);
 
     // Load repositories on startup
     app.load_repositories();
@@ -80,12 +70,12 @@ pub fn run(ctx: &crate::context::AppContext) -> Result<()> {
             let layout = ShellLayout::calculate(area, false, false);
 
             // Render title bar
-            title_bar.render(f, layout.title_bar, &theme);
+            title_bar.render(f, layout.title_bar, &app.theme);
 
             // Render content based on current view
             match &app.current_view {
                 app::View::RepositoryList => {
-                    app.repo_list_state.render(f, layout.content, &theme);
+                    app.repo_list_state.render(f, layout.content, &app.theme);
                 }
                 _ => {
                     // TODO: Implement other views
@@ -93,7 +83,7 @@ pub fn run(ctx: &crate::context::AppContext) -> Result<()> {
             }
 
             // Render footer
-            footer.render(f, layout.footer, &theme);
+            footer.render(f, layout.footer, &app.theme);
         })?;
 
         // Check if app wants to quit
@@ -140,28 +130,6 @@ fn restore_terminal(mut terminal: Terminal<CrosstermBackend<Stdout>>) -> Result<
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     Ok(())
-}
-
-/// Get registry URL from config.
-///
-/// Returns the default registry from config, or falls back to localhost:5000.
-fn get_registry_url(config: &crate::config::Config) -> Result<String> {
-    // Use default registry from config
-    if let Some(default_name) = &config.registries.default {
-        for entry in &config.registries.list {
-            if entry.name == *default_name {
-                return Ok(entry.url.clone());
-            }
-        }
-    }
-
-    // Fallback to first registry if available
-    if let Some(first) = config.registries.list.first() {
-        return Ok(first.url.clone());
-    }
-
-    // Fallback to localhost
-    Ok("localhost:5000".to_string())
 }
 
 #[cfg(test)]

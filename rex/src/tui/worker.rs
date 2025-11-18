@@ -3,9 +3,10 @@
 //! Provides worker functions that perform blocking I/O operations in background
 //! threads, sending results back to the UI thread via channels.
 
+use std::path::Path;
 use std::sync::mpsc::Sender;
 
-use librex::Rex;
+use librex::{Credentials, Rex};
 
 use super::Result;
 use super::app::Message;
@@ -17,25 +18,42 @@ use super::app::Message;
 /// # Arguments
 ///
 /// * `registry_url` - The URL of the registry to query
+/// * `cache_dir` - The cache directory path
+/// * `credentials` - Optional credentials for authentication
 /// * `tx` - The channel sender for sending the result back to the UI thread
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use std::sync::mpsc::channel;
+/// use std::path::Path;
 /// use rex::tui::worker::fetch_repositories;
 ///
 /// let (tx, rx) = channel();
+/// let cache_dir = Path::new("/tmp/cache");
 /// std::thread::spawn(move || {
-///     fetch_repositories("localhost:5000".to_string(), tx);
+///     fetch_repositories("localhost:5000".to_string(), cache_dir, None, tx);
 /// });
 /// ```
-pub fn fetch_repositories(registry_url: String, tx: Sender<Message>) {
+pub fn fetch_repositories(
+    registry_url: String,
+    cache_dir: &Path,
+    credentials: Option<Credentials>,
+    tx: Sender<Message>,
+) {
     let result = (|| -> Result<Vec<String>> {
-        // Connect to registry
-        let mut rex = Rex::connect(&registry_url)?;
+        // Build Rex client with cache and credentials
+        let mut builder = Rex::builder()
+            .registry_url(&registry_url)
+            .with_cache(cache_dir);
 
-        // Fetch repository list (already returns Vec<String>)
+        if let Some(creds) = credentials {
+            builder = builder.with_credentials(creds);
+        }
+
+        let mut rex = builder.build()?;
+
+        // Fetch repository list
         let repos = rex.list_repositories()?;
 
         Ok(repos)
@@ -53,27 +71,45 @@ pub fn fetch_repositories(registry_url: String, tx: Sender<Message>) {
 ///
 /// * `registry_url` - The URL of the registry to query
 /// * `repository` - The name of the repository
+/// * `cache_dir` - The cache directory path
+/// * `credentials` - Optional credentials for authentication
 /// * `tx` - The channel sender for sending the result back to the UI thread
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use std::sync::mpsc::channel;
+/// use std::path::Path;
 /// use rex::tui::worker::fetch_tags;
 ///
 /// let (tx, rx) = channel();
 /// let repo = "alpine".to_string();
+/// let cache_dir = Path::new("/tmp/cache");
 /// std::thread::spawn(move || {
-///     fetch_tags("localhost:5000".to_string(), repo, tx);
+///     fetch_tags("localhost:5000".to_string(), repo, cache_dir, None, tx);
 /// });
 /// ```
 #[allow(dead_code)] // TODO: Remove when integrated with views
-pub fn fetch_tags(registry_url: String, repository: String, tx: Sender<Message>) {
+pub fn fetch_tags(
+    registry_url: String,
+    repository: String,
+    cache_dir: &Path,
+    credentials: Option<Credentials>,
+    tx: Sender<Message>,
+) {
     let repo_clone = repository.clone();
 
     let result = (|| -> Result<Vec<String>> {
-        // Connect to registry
-        let mut rex = Rex::connect(&registry_url)?;
+        // Build Rex client with cache and credentials
+        let mut builder = Rex::builder()
+            .registry_url(&registry_url)
+            .with_cache(cache_dir);
+
+        if let Some(creds) = credentials {
+            builder = builder.with_credentials(creds);
+        }
+
+        let mut rex = builder.build()?;
 
         // Fetch tags for the repository
         let tags = rex.list_tags(&repository)?;
@@ -94,29 +130,48 @@ pub fn fetch_tags(registry_url: String, repository: String, tx: Sender<Message>)
 /// * `registry_url` - The URL of the registry to query
 /// * `repository` - The name of the repository
 /// * `tag` - The tag of the image
+/// * `cache_dir` - The cache directory path
+/// * `credentials` - Optional credentials for authentication
 /// * `tx` - The channel sender for sending the result back to the UI thread
 ///
 /// # Examples
 ///
 /// ```no_run
 /// use std::sync::mpsc::channel;
+/// use std::path::Path;
 /// use rex::tui::worker::fetch_manifest;
 ///
 /// let (tx, rx) = channel();
 /// let repo = "alpine".to_string();
 /// let tag = "latest".to_string();
+/// let cache_dir = Path::new("/tmp/cache");
 /// std::thread::spawn(move || {
-///     fetch_manifest("localhost:5000".to_string(), repo, tag, tx);
+///     fetch_manifest("localhost:5000".to_string(), repo, tag, cache_dir, None, tx);
 /// });
 /// ```
 #[allow(dead_code)] // TODO: Remove when integrated with views
-pub fn fetch_manifest(registry_url: String, repository: String, tag: String, tx: Sender<Message>) {
+pub fn fetch_manifest(
+    registry_url: String,
+    repository: String,
+    tag: String,
+    cache_dir: &Path,
+    credentials: Option<Credentials>,
+    tx: Sender<Message>,
+) {
     let repo_clone = repository.clone();
     let tag_clone = tag.clone();
 
     let result = (|| -> Result<Vec<u8>> {
-        // Connect to registry
-        let mut rex = Rex::connect(&registry_url)?;
+        // Build Rex client with cache and credentials
+        let mut builder = Rex::builder()
+            .registry_url(&registry_url)
+            .with_cache(cache_dir);
+
+        if let Some(creds) = credentials {
+            builder = builder.with_credentials(creds);
+        }
+
+        let mut rex = builder.build()?;
 
         // Build reference string (repository:tag)
         let reference_str = format!("{}:{}", repository, tag);
