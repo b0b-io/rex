@@ -77,6 +77,9 @@ pub fn run(ctx: &crate::context::AppContext) -> Result<()> {
                 app::View::RepositoryList => {
                     app.repo_list_state.render(f, layout.content, &app.theme);
                 }
+                app::View::TagList(_) => {
+                    app.tag_list_state.render(f, layout.content, &app.theme);
+                }
                 _ => {
                     // TODO: Implement other views
                 }

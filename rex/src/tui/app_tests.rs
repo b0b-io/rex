@@ -476,3 +476,196 @@ fn test_repo_list_refresh_event() {
 
     assert!(app.repo_list_state.loading);
 }
+
+// Tag list event tests
+
+#[test]
+fn test_tag_list_state_initialized() {
+    let app = App::new(&create_test_context()).unwrap();
+
+    assert_eq!(app.tag_list_state.repository, "");
+    assert!(app.tag_list_state.items.is_empty());
+    assert_eq!(app.tag_list_state.selected, 0);
+    assert!(!app.tag_list_state.loading);
+}
+
+#[test]
+fn test_tag_list_up_event() {
+    let mut app = App::new(&create_test_context()).unwrap();
+
+    // Navigate to tag list
+    app.current_view = View::TagList("alpine".to_string());
+    app.tag_list_state = TagListState::new("alpine".to_string());
+
+    let tags = vec!["latest".to_string(), "3.19".to_string()];
+    app.handle_message(Message::TagsLoaded("alpine".to_string(), Ok(tags)));
+
+    // Start at first item
+    assert_eq!(app.tag_list_state.selected, 0);
+
+    // Navigate down
+    app.handle_event(Event::Down).unwrap();
+    assert_eq!(app.tag_list_state.selected, 1);
+
+    // Navigate back up
+    app.handle_event(Event::Up).unwrap();
+    assert_eq!(app.tag_list_state.selected, 0);
+}
+
+#[test]
+fn test_tag_list_down_event() {
+    let mut app = App::new(&create_test_context()).unwrap();
+
+    // Navigate to tag list
+    app.current_view = View::TagList("alpine".to_string());
+    app.tag_list_state = TagListState::new("alpine".to_string());
+
+    let tags = vec!["latest".to_string(), "3.19".to_string(), "3.18".to_string()];
+    app.handle_message(Message::TagsLoaded("alpine".to_string(), Ok(tags)));
+
+    assert_eq!(app.tag_list_state.selected, 0);
+
+    app.handle_event(Event::Down).unwrap();
+    assert_eq!(app.tag_list_state.selected, 1);
+
+    app.handle_event(Event::Down).unwrap();
+    assert_eq!(app.tag_list_state.selected, 2);
+}
+
+#[test]
+fn test_tag_list_enter_navigates_to_image_details() {
+    let mut app = App::new(&create_test_context()).unwrap();
+
+    // Navigate to tag list
+    app.current_view = View::TagList("alpine".to_string());
+    app.tag_list_state = TagListState::new("alpine".to_string());
+
+    let tags = vec!["latest".to_string(), "3.19".to_string()];
+    app.handle_message(Message::TagsLoaded("alpine".to_string(), Ok(tags)));
+
+    // Select first tag and press Enter
+    app.handle_event(Event::Enter).unwrap();
+
+    // Should navigate to image details for alpine:latest
+    assert_eq!(
+        app.current_view,
+        View::ImageDetails("alpine".to_string(), "latest".to_string())
+    );
+    assert_eq!(app.view_stack.len(), 1);
+    assert_eq!(app.view_stack[0], View::TagList("alpine".to_string()));
+}
+
+#[test]
+fn test_tag_list_enter_on_empty_list_does_nothing() {
+    let mut app = App::new(&create_test_context()).unwrap();
+
+    // Navigate to tag list with no tags loaded
+    app.current_view = View::TagList("alpine".to_string());
+    app.tag_list_state = TagListState::new("alpine".to_string());
+
+    // Try to press Enter on empty list
+    app.handle_event(Event::Enter).unwrap();
+
+    // Should stay on tag list
+    assert_eq!(app.current_view, View::TagList("alpine".to_string()));
+    assert_eq!(app.view_stack.len(), 0);
+}
+
+#[test]
+fn test_tag_list_refresh_event() {
+    let mut app = App::new(&create_test_context()).unwrap();
+
+    // Navigate to tag list
+    app.current_view = View::TagList("alpine".to_string());
+    app.tag_list_state = TagListState::new("alpine".to_string());
+
+    app.handle_event(Event::Refresh).unwrap();
+
+    assert!(app.tag_list_state.loading);
+}
+
+#[test]
+fn test_load_tags_sets_loading_state() {
+    let mut app = App::new(&create_test_context()).unwrap();
+
+    app.tag_list_state = TagListState::new("alpine".to_string());
+    assert!(!app.tag_list_state.loading);
+
+    app.load_tags("alpine".to_string());
+
+    assert!(app.tag_list_state.loading);
+}
+
+#[test]
+fn test_handle_tags_loaded_populates_tag_list_state() {
+    let mut app = App::new(&create_test_context()).unwrap();
+
+    // Navigate to tag list
+    app.current_view = View::TagList("alpine".to_string());
+    app.tag_list_state = TagListState::new("alpine".to_string());
+    app.tag_list_state.loading = true;
+
+    let tags = vec!["latest".to_string(), "3.19".to_string()];
+    app.handle_message(Message::TagsLoaded("alpine".to_string(), Ok(tags.clone())));
+
+    // Should populate tag_list_state.items
+    assert_eq!(app.tag_list_state.items.len(), 2);
+    assert_eq!(app.tag_list_state.items[0].tag, "latest");
+    assert_eq!(app.tag_list_state.items[1].tag, "3.19");
+    assert!(!app.tag_list_state.loading);
+
+    // Should also store in tags HashMap
+    assert_eq!(app.tags.get("alpine"), Some(&tags));
+}
+
+#[test]
+fn test_handle_tags_loaded_only_updates_current_repository() {
+    let mut app = App::new(&create_test_context()).unwrap();
+
+    // Navigate to tag list for alpine
+    app.current_view = View::TagList("alpine".to_string());
+    app.tag_list_state = TagListState::new("alpine".to_string());
+    app.tag_list_state.loading = true;
+
+    // Receive tags for nginx (different repository)
+    let nginx_tags = vec!["latest".to_string()];
+    app.handle_message(Message::TagsLoaded(
+        "nginx".to_string(),
+        Ok(nginx_tags.clone()),
+    ));
+
+    // Should NOT populate tag_list_state.items because we're viewing alpine
+    assert_eq!(app.tag_list_state.items.len(), 0);
+
+    // But should store in tags HashMap
+    assert_eq!(app.tags.get("nginx"), Some(&nginx_tags));
+
+    // Now receive tags for alpine
+    let alpine_tags = vec!["latest".to_string(), "3.19".to_string()];
+    app.handle_message(Message::TagsLoaded(
+        "alpine".to_string(),
+        Ok(alpine_tags.clone()),
+    ));
+
+    // Should NOW populate tag_list_state.items
+    assert_eq!(app.tag_list_state.items.len(), 2);
+    assert_eq!(app.tag_list_state.items[0].tag, "latest");
+}
+
+#[test]
+fn test_repo_list_enter_initializes_tag_list_state() {
+    let mut app = App::new(&create_test_context()).unwrap();
+    let repos = vec!["alpine".to_string(), "nginx".to_string()];
+    app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
+
+    // Before Enter, tag_list_state should be default
+    assert_eq!(app.tag_list_state.repository, "");
+
+    // Press Enter on first repository
+    app.handle_event(Event::Enter).unwrap();
+
+    // tag_list_state should be initialized for alpine
+    assert_eq!(app.tag_list_state.repository, "alpine");
+    assert!(app.tag_list_state.loading);
+    assert_eq!(app.current_view, View::TagList("alpine".to_string()));
+}

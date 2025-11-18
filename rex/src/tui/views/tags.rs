@@ -2,6 +2,14 @@
 //!
 //! Provides the data structure and state management for the tag list view.
 
+use ratatui::{
+    Frame,
+    layout::{Constraint, Rect},
+    widgets::{Block, Borders, Cell, Row, Table},
+};
+
+use crate::tui::theme::Theme;
+
 /// A tag item in the list.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(dead_code)] // TODO: Remove when integrated into main TUI loop
@@ -154,6 +162,91 @@ impl TagListState {
     /// ```
     pub fn selected_item(&self) -> Option<&TagItem> {
         self.items.get(self.selected)
+    }
+
+    /// Render the tag list view.
+    ///
+    /// Displays a table with columns for tag name, digest, size, platforms, and last updated.
+    /// The selected row is highlighted with a selection indicator (▶).
+    ///
+    /// # Arguments
+    ///
+    /// * `frame` - The ratatui frame to render to
+    /// * `area` - The rectangular area to render in
+    /// * `theme` - The theme to use for styling
+    pub fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        // Header row
+        let header = Row::new(vec![
+            Cell::from("TAG"),
+            Cell::from("DIGEST"),
+            Cell::from("SIZE"),
+            Cell::from("PLATFORMS"),
+        ])
+        .style(theme.title_style());
+
+        // Data rows
+        let rows: Vec<Row> = self
+            .items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                let style = if i == self.selected {
+                    theme.selected_style()
+                } else {
+                    ratatui::style::Style::default()
+                };
+
+                let indicator = if i == self.selected { "▶ " } else { "  " };
+
+                // Truncate digest to first 12 characters for display
+                let digest_display = if item.digest.is_empty() {
+                    "-".to_string()
+                } else if item.digest.len() > 12 {
+                    format!("{}...", &item.digest[..12])
+                } else {
+                    item.digest.clone()
+                };
+
+                // Format size
+                let size_display = if item.size == 0 {
+                    "-".to_string()
+                } else {
+                    librex::format::format_size(item.size)
+                };
+
+                // Format platforms
+                let platforms_display = if item.platforms.is_empty() {
+                    "-".to_string()
+                } else {
+                    item.platforms.join(", ")
+                };
+
+                Row::new(vec![
+                    Cell::from(format!("{}{}", indicator, item.tag)),
+                    Cell::from(digest_display),
+                    Cell::from(size_display),
+                    Cell::from(platforms_display),
+                ])
+                .style(style)
+            })
+            .collect();
+
+        let widths = [
+            Constraint::Percentage(25),
+            Constraint::Length(15),
+            Constraint::Length(12),
+            Constraint::Percentage(40),
+        ];
+
+        let title = format!(" Tags for {} ", self.repository);
+        let table = Table::new(rows, widths).header(header).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(theme.border_style())
+                .title(title),
+        );
+
+        frame.render_widget(table, area);
     }
 }
 

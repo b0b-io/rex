@@ -14,6 +14,7 @@ use super::Result;
 use super::events::Event;
 use super::theme::Theme;
 use super::views::repos::{RepositoryItem, RepositoryListState};
+use super::views::tags::{TagItem, TagListState};
 use super::worker;
 
 /// Views in the application.
@@ -74,6 +75,8 @@ pub struct App {
     // View states
     /// State for the repository list view
     pub repo_list_state: RepositoryListState,
+    /// State for the tag list view
+    pub tag_list_state: TagListState,
 
     // Communication
     /// Sender for messages from workers
@@ -156,6 +159,7 @@ impl App {
             repositories: vec![],
             tags: HashMap::new(),
             repo_list_state: RepositoryListState::new(),
+            tag_list_state: TagListState::default(),
             tx,
             rx,
             theme,
@@ -241,6 +245,11 @@ impl App {
                 // Navigate to tag list for selected repository
                 if let Some(item) = self.repo_list_state.selected_item() {
                     let repo_name = item.name.clone();
+                    // Initialize tag list state for this repository
+                    self.tag_list_state = TagListState::new(repo_name.clone());
+                    // Load tags in background
+                    self.load_tags(repo_name.clone());
+                    // Navigate to tag list view
                     self.push_view(View::TagList(repo_name));
                 }
             }
@@ -265,8 +274,32 @@ impl App {
     /// # Errors
     ///
     /// Returns an error if event handling fails.
-    fn handle_tag_list_event(&mut self, _event: Event) -> Result<()> {
-        // TODO: Implement when tag list view is added
+    fn handle_tag_list_event(&mut self, event: Event) -> Result<()> {
+        match event {
+            Event::Up => {
+                self.tag_list_state.select_previous();
+            }
+            Event::Down => {
+                self.tag_list_state.select_next();
+            }
+            Event::Enter => {
+                // Navigate to image details for selected tag
+                if let Some(item) = self.tag_list_state.selected_item() {
+                    let repo = self.tag_list_state.repository.clone();
+                    let tag = item.tag.clone();
+                    self.push_view(View::ImageDetails(repo, tag));
+                }
+            }
+            Event::Refresh => {
+                // Reload tags for the current repository
+                let repo = self.tag_list_state.repository.clone();
+                self.load_tags(repo);
+            }
+            Event::Search => {
+                // TODO: Implement search mode in Phase 4
+            }
+            _ => {}
+        }
         Ok(())
     }
 
@@ -389,9 +422,25 @@ impl App {
                 // TODO: Show error banner
             }
             Message::TagsLoaded(repo, Ok(tags)) => {
-                self.tags.insert(repo, tags);
+                self.tags.insert(repo.clone(), tags.clone());
+                // Update tag list state if we're currently viewing this repository
+                if self.tag_list_state.repository == repo {
+                    // Convert tags to TagItem objects
+                    self.tag_list_state.items = tags
+                        .into_iter()
+                        .map(|tag| TagItem {
+                            tag,
+                            digest: String::new(), // TODO: Fetch actual digest from manifest
+                            size: 0,               // TODO: Calculate actual size
+                            platforms: vec![],     // TODO: Fetch platforms from manifest
+                            updated: None,         // TODO: Fetch last updated time
+                        })
+                        .collect();
+                    self.tag_list_state.loading = false;
+                }
             }
             Message::TagsLoaded(_, Err(_)) => {
+                self.tag_list_state.loading = false;
                 // TODO: Show error banner
             }
             Message::ManifestLoaded(_, _, Ok(_)) => {
@@ -470,6 +519,45 @@ impl App {
         // Spawn worker thread to fetch repositories
         std::thread::spawn(move || {
             worker::fetch_repositories(registry_url, &cache_dir, credentials, tx);
+        });
+    }
+
+    /// Load tags for a specific repository in a background worker.
+    ///
+    /// Sets the loading state and spawns a worker to fetch the tag list.
+    /// When complete, the worker sends a `TagsLoaded` message.
+    ///
+    /// # Arguments
+    ///
+    /// * `repository` - The name of the repository to load tags for
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::path::PathBuf;
+    /// use rex::tui::app::App;
+    /// use rex::tui::theme::Theme;
+    ///
+    /// let mut app = App::new(
+    ///     "localhost:5000".to_string(),
+    ///     PathBuf::from("/tmp/cache"),
+    ///     None,
+    ///     Theme::dark(),
+    ///     false
+    /// );
+    /// app.load_tags("alpine".to_string());
+    /// assert!(app.tag_list_state.loading);
+    /// ```
+    pub fn load_tags(&mut self, repository: String) {
+        self.tag_list_state.loading = true;
+        let registry_url = self.current_registry.clone();
+        let cache_dir = self.cache_dir.clone();
+        let credentials = self.credentials.clone();
+        let tx = self.tx.clone();
+
+        // Spawn worker thread to fetch tags
+        std::thread::spawn(move || {
+            worker::fetch_tags(registry_url, repository, &cache_dir, credentials, tx);
         });
     }
 }
