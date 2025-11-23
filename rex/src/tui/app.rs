@@ -13,6 +13,7 @@ use librex::auth::CredentialStore;
 use super::Result;
 use super::events::Event;
 use super::theme::Theme;
+use super::views::details::ImageDetailsState;
 use super::views::repos::{RepositoryItem, RepositoryListState};
 use super::views::tags::{TagItem, TagListState};
 use super::worker;
@@ -37,12 +38,14 @@ pub enum View {
 #[derive(Debug)]
 #[allow(dead_code)] // TODO: Remove when workers are implemented
 pub enum Message {
-    /// Repositories loaded successfully or with error
-    RepositoriesLoaded(Result<Vec<String>>),
+    /// Repositories loaded successfully or with error (includes tag counts)
+    RepositoriesLoaded(Result<Vec<RepositoryItem>>),
     /// Tags loaded for a repository
     TagsLoaded(String, Result<Vec<String>>),
     /// Manifest loaded for an image
-    ManifestLoaded(String, String, Result<Vec<u8>>),
+    ManifestLoaded(String, String, Box<Result<librex::ManifestOrIndex>>),
+    /// Configuration loaded for an image
+    ConfigLoaded(String, String, Box<Result<librex::oci::ImageConfiguration>>),
     /// Generic error message
     Error(String),
 }
@@ -77,6 +80,8 @@ pub struct App {
     pub repo_list_state: RepositoryListState,
     /// State for the tag list view
     pub tag_list_state: TagListState,
+    /// State for the image details view
+    pub details_state: ImageDetailsState,
 
     // Communication
     /// Sender for messages from workers
@@ -160,6 +165,7 @@ impl App {
             tags: HashMap::new(),
             repo_list_state: RepositoryListState::new(),
             tag_list_state: TagListState::default(),
+            details_state: ImageDetailsState::default(),
             tx,
             rx,
             theme,
@@ -254,8 +260,8 @@ impl App {
                 }
             }
             Event::Refresh => {
-                // Reload repositories
-                self.load_repositories();
+                // Reload repositories (concurrency of 8 is reasonable default)
+                self.load_repositories(8);
             }
             Event::Search => {
                 // TODO: Implement search mode in Phase 4
@@ -287,6 +293,11 @@ impl App {
                 if let Some(item) = self.tag_list_state.selected_item() {
                     let repo = self.tag_list_state.repository.clone();
                     let tag = item.tag.clone();
+                    // Initialize details state
+                    self.details_state = ImageDetailsState::new(repo.clone(), tag.clone());
+                    // Load manifest and config in background
+                    self.load_manifest(repo.clone(), tag.clone());
+                    // Navigate to details view
                     self.push_view(View::ImageDetails(repo, tag));
                 }
             }
@@ -312,8 +323,31 @@ impl App {
     /// # Errors
     ///
     /// Returns an error if event handling fails.
-    fn handle_details_event(&mut self, _event: Event) -> Result<()> {
-        // TODO: Implement when details view is added
+    fn handle_details_event(&mut self, event: Event) -> Result<()> {
+        match event {
+            Event::Up => {
+                self.details_state.scroll_up();
+            }
+            Event::Down => {
+                self.details_state.scroll_down();
+            }
+            Event::PageUp => {
+                self.details_state.scroll_page_up();
+            }
+            Event::PageDown => {
+                self.details_state.scroll_page_down();
+            }
+            Event::Home => {
+                self.details_state.scroll_to_top();
+            }
+            Event::Refresh => {
+                // Reload manifest and config
+                let repo = self.details_state.repository.clone();
+                let tag = self.details_state.tag.clone();
+                self.load_manifest(repo, tag);
+            }
+            _ => {}
+        }
         Ok(())
     }
 
@@ -403,18 +437,10 @@ impl App {
     /// * `msg` - The message to handle
     fn handle_message(&mut self, msg: Message) {
         match msg {
-            Message::RepositoriesLoaded(Ok(repos)) => {
-                self.repositories = repos.clone();
-                // Update repository list state with items
-                self.repo_list_state.items = repos
-                    .into_iter()
-                    .map(|name| RepositoryItem {
-                        name,
-                        tag_count: 0,       // TODO: Fetch actual tag count
-                        total_size: 0,      // TODO: Calculate actual total size
-                        last_updated: None, // TODO: Fetch actual last updated
-                    })
-                    .collect();
+            Message::RepositoriesLoaded(Ok(items)) => {
+                // Update repository list with metadata
+                self.repositories = items.iter().map(|item| item.name.clone()).collect();
+                self.repo_list_state.items = items;
                 self.repo_list_state.loading = false;
             }
             Message::RepositoriesLoaded(Err(_)) => {
@@ -443,11 +469,35 @@ impl App {
                 self.tag_list_state.loading = false;
                 // TODO: Show error banner
             }
-            Message::ManifestLoaded(_, _, Ok(_)) => {
-                // TODO: Update manifest data when details view is implemented
+            Message::ManifestLoaded(repo, tag, result) => {
+                // Update details state if we're currently viewing this image
+                if self.details_state.repository == repo && self.details_state.tag == tag {
+                    match *result {
+                        Ok(manifest) => {
+                            self.details_state.manifest = Some(manifest);
+                            // Don't clear loading yet - wait for config to load too
+                        }
+                        Err(_) => {
+                            self.details_state.loading = false;
+                            // TODO: Show error banner
+                        }
+                    }
+                }
             }
-            Message::ManifestLoaded(_, _, Err(_)) => {
-                // TODO: Show error banner
+            Message::ConfigLoaded(repo, tag, result) => {
+                // Update details state if we're currently viewing this image
+                if self.details_state.repository == repo && self.details_state.tag == tag {
+                    match *result {
+                        Ok(config) => {
+                            self.details_state.config = Some(config);
+                            self.details_state.loading = false;
+                        }
+                        Err(_) => {
+                            // Config is optional (may not exist for indexes)
+                            self.details_state.loading = false;
+                        }
+                    }
+                }
             }
             Message::Error(_) => {
                 // TODO: Show error banner
@@ -489,8 +539,13 @@ impl App {
 
     /// Load repositories from the registry in a background worker.
     ///
-    /// Sets the loading state and spawns a worker to fetch the repository list.
+    /// Sets the loading state and spawns a worker to fetch the repository list with
+    /// metadata (tag counts). Uses parallel requests to fetch tag counts.
     /// When complete, the worker sends a `RepositoriesLoaded` message.
+    ///
+    /// # Arguments
+    ///
+    /// * `concurrency` - Maximum number of parallel connections
     ///
     /// # Examples
     ///
@@ -506,19 +561,19 @@ impl App {
     ///     Theme::dark(),
     ///     false
     /// );
-    /// app.load_repositories();
+    /// app.load_repositories(8);
     /// assert!(app.repo_list_state.loading);
     /// ```
-    pub fn load_repositories(&mut self) {
+    pub fn load_repositories(&mut self, concurrency: usize) {
         self.repo_list_state.loading = true;
         let registry_url = self.current_registry.clone();
         let cache_dir = self.cache_dir.clone();
         let credentials = self.credentials.clone();
         let tx = self.tx.clone();
 
-        // Spawn worker thread to fetch repositories
+        // Spawn worker thread to fetch repositories with metadata
         std::thread::spawn(move || {
-            worker::fetch_repositories(registry_url, &cache_dir, credentials, tx);
+            worker::fetch_repositories(registry_url, &cache_dir, credentials, tx, concurrency);
         });
     }
 
@@ -558,6 +613,35 @@ impl App {
         // Spawn worker thread to fetch tags
         std::thread::spawn(move || {
             worker::fetch_tags(registry_url, repository, &cache_dir, credentials, tx);
+        });
+    }
+
+    /// Load manifest and config for a specific image in a background worker.
+    ///
+    /// Sets the loading state and spawns a worker to fetch the manifest and config.
+    /// When complete, the worker sends `ManifestLoaded` and `ConfigLoaded` messages.
+    ///
+    /// # Arguments
+    ///
+    /// * `repository` - The name of the repository
+    /// * `tag` - The tag name
+    pub fn load_manifest(&mut self, repository: String, tag: String) {
+        self.details_state.loading = true;
+        let registry_url = self.current_registry.clone();
+        let cache_dir = self.cache_dir.clone();
+        let credentials = self.credentials.clone();
+        let tx = self.tx.clone();
+
+        // Spawn worker thread to fetch manifest and config
+        std::thread::spawn(move || {
+            worker::fetch_manifest_and_config(
+                registry_url,
+                repository,
+                tag,
+                &cache_dir,
+                credentials,
+                tx,
+            );
         });
     }
 }

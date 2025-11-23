@@ -19,7 +19,7 @@ fn test_fetch_repositories_sends_message() {
 
     // Spawn in a thread to test async behavior
     let handle = std::thread::spawn(move || {
-        fetch_repositories("invalid-url".to_string(), test_cache_dir(), None, tx);
+        fetch_repositories("invalid-url".to_string(), test_cache_dir(), None, tx, 5);
     });
 
     // Wait for worker to complete
@@ -65,11 +65,11 @@ fn test_fetch_tags_sends_message() {
 }
 
 #[test]
-fn test_fetch_manifest_sends_message() {
+fn test_fetch_manifest_and_config_sends_messages() {
     let (tx, rx) = channel();
 
     let handle = std::thread::spawn(move || {
-        fetch_manifest(
+        fetch_manifest_and_config(
             "invalid-url".to_string(),
             "alpine".to_string(),
             "latest".to_string(),
@@ -102,6 +102,7 @@ fn test_fetch_repositories_handles_connection_error() {
         test_cache_dir(),
         None,
         tx,
+        5,
     );
 
     let msg = rx.recv_timeout(Duration::from_secs(2));
@@ -139,10 +140,10 @@ fn test_fetch_tags_handles_connection_error() {
 }
 
 #[test]
-fn test_fetch_manifest_handles_connection_error() {
+fn test_fetch_manifest_and_config_handles_connection_error() {
     let (tx, rx) = channel();
 
-    fetch_manifest(
+    fetch_manifest_and_config(
         "http://nonexistent.invalid:9999".to_string(),
         "alpine".to_string(),
         "latest".to_string(),
@@ -178,6 +179,7 @@ fn test_multiple_workers_can_run_concurrently() {
             test_cache_dir(),
             None,
             tx1,
+            5,
         );
     });
 
@@ -192,7 +194,7 @@ fn test_multiple_workers_can_run_concurrently() {
     });
 
     let h3 = std::thread::spawn(move || {
-        fetch_manifest(
+        fetch_manifest_and_config(
             "http://invalid3.test".to_string(),
             "repo2".to_string(),
             "tag1".to_string(),
@@ -226,6 +228,7 @@ fn test_worker_thread_exits_after_completion() {
             test_cache_dir(),
             None,
             tx,
+            5,
         );
         // Thread should exit here
     });

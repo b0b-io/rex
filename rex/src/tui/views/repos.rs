@@ -231,11 +231,29 @@ impl RepositoryListState {
 
                 let indicator = if i == self.selected { "▶ " } else { "  " };
 
+                // Format timestamp in local timezone
+                let updated_str = item
+                    .last_updated
+                    .as_ref()
+                    .map(|timestamp| {
+                        use chrono::{DateTime, Local};
+
+                        // Parse RFC3339 and convert to local timezone
+                        DateTime::parse_from_rfc3339(timestamp)
+                            .ok()
+                            .map(|dt| {
+                                let local: DateTime<Local> = dt.with_timezone(&Local);
+                                local.format("%Y-%m-%d %H:%M").to_string()
+                            })
+                            .unwrap_or_else(|| timestamp.clone())
+                    })
+                    .unwrap_or_else(|| "-".to_string());
+
                 Row::new(vec![
                     Cell::from(format!("{}{}", indicator, item.name)),
                     Cell::from(item.tag_count.to_string()),
                     Cell::from(librex::format::format_size(item.total_size)),
-                    Cell::from(item.last_updated.as_deref().unwrap_or("-")),
+                    Cell::from(updated_str),
                 ])
                 .style(style)
             })

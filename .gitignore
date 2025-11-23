@@ -1,6 +1,7 @@
 /target
 /commit_msg.tmp
 .claude/
+CLAUDE.md
 
 # Coverage artifacts
 lcov.info

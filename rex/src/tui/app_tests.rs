@@ -11,6 +11,19 @@ fn create_test_context() -> AppContext {
     AppContext::build(ColorChoice::Never, VerbosityLevel::Normal)
 }
 
+/// Helper to create RepositoryItems from strings for tests
+fn repos_from_names(names: Vec<String>) -> Vec<RepositoryItem> {
+    names
+        .into_iter()
+        .map(|name| RepositoryItem {
+            name,
+            tag_count: 1,
+            total_size: 0,
+            last_updated: None,
+        })
+        .collect()
+}
+
 #[test]
 fn test_app_new() {
     let ctx = create_test_context();
@@ -214,10 +227,11 @@ fn test_handle_resize_event() {
 fn test_handle_repositories_loaded_success() {
     let mut app = App::new(&create_test_context()).unwrap();
 
-    let repos = vec!["alpine".to_string(), "nginx".to_string()];
-    app.handle_message(Message::RepositoriesLoaded(Ok(repos.clone())));
+    let repo_names = vec!["alpine".to_string(), "nginx".to_string()];
+    let repos = repos_from_names(repo_names.clone());
+    app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
 
-    assert_eq!(app.repositories, repos);
+    assert_eq!(app.repositories, repo_names);
 }
 
 #[test]
@@ -277,8 +291,10 @@ fn test_process_messages_drains_queue() {
 
     // Simulate worker sending messages
     let tx = app.tx.clone();
-    tx.send(Message::RepositoriesLoaded(Ok(vec!["alpine".to_string()])))
-        .unwrap();
+    tx.send(Message::RepositoriesLoaded(Ok(repos_from_names(vec![
+        "alpine".to_string(),
+    ]))))
+    .unwrap();
     tx.send(Message::TagsLoaded(
         "alpine".to_string(),
         Ok(vec!["latest".to_string()]),
@@ -299,7 +315,9 @@ fn test_spawn_worker() {
     let app = App::new(&create_test_context()).unwrap();
 
     // Spawn a worker that sends a message
-    app.spawn_worker(|| Message::RepositoriesLoaded(Ok(vec!["test".to_string()])));
+    app.spawn_worker(|| {
+        Message::RepositoriesLoaded(Ok(repos_from_names(vec!["test".to_string()])))
+    });
 
     // Give the worker thread time to execute
     std::thread::sleep(std::time::Duration::from_millis(50));
@@ -314,7 +332,7 @@ fn test_spawn_multiple_workers() {
 
     for i in 0..5 {
         let repo = format!("repo{}", i);
-        app.spawn_worker(move || Message::RepositoriesLoaded(Ok(vec![repo])));
+        app.spawn_worker(move || Message::RepositoriesLoaded(Ok(repos_from_names(vec![repo]))));
     }
 
     // Workers should spawn without blocking
@@ -373,8 +391,9 @@ fn test_handle_repositories_loaded_populates_repo_list_state() {
     let mut app = App::new(&create_test_context()).unwrap();
     app.repo_list_state.loading = true;
 
-    let repos = vec!["alpine".to_string(), "nginx".to_string()];
-    app.handle_message(Message::RepositoriesLoaded(Ok(repos.clone())));
+    let repo_names = vec!["alpine".to_string(), "nginx".to_string()];
+    let repos = repos_from_names(repo_names);
+    app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
 
     assert_eq!(app.repo_list_state.items.len(), 2);
     assert_eq!(app.repo_list_state.items[0].name, "alpine");
@@ -396,7 +415,7 @@ fn test_handle_repositories_loaded_error_clears_loading() {
 #[test]
 fn test_repo_list_up_event() {
     let mut app = App::new(&create_test_context()).unwrap();
-    let repos = vec!["alpine".to_string(), "nginx".to_string()];
+    let repos = repos_from_names(vec!["alpine".to_string(), "nginx".to_string()]);
     app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
 
     // Start at first item
@@ -414,11 +433,11 @@ fn test_repo_list_up_event() {
 #[test]
 fn test_repo_list_down_event() {
     let mut app = App::new(&create_test_context()).unwrap();
-    let repos = vec![
+    let repos = repos_from_names(vec![
         "alpine".to_string(),
         "nginx".to_string(),
         "redis".to_string(),
-    ];
+    ]);
     app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
 
     assert_eq!(app.repo_list_state.selected, 0);
@@ -433,7 +452,7 @@ fn test_repo_list_down_event() {
 #[test]
 fn test_repo_list_enter_navigates_to_tag_list() {
     let mut app = App::new(&create_test_context()).unwrap();
-    let repos = vec!["alpine".to_string(), "nginx".to_string()];
+    let repos = repos_from_names(vec!["alpine".to_string(), "nginx".to_string()]);
     app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
 
     // Select first repository and press Enter
@@ -463,7 +482,7 @@ fn test_load_repositories_sets_loading_state() {
 
     assert!(!app.repo_list_state.loading);
 
-    app.load_repositories();
+    app.load_repositories(5);
 
     assert!(app.repo_list_state.loading);
 }
@@ -655,7 +674,7 @@ fn test_handle_tags_loaded_only_updates_current_repository() {
 #[test]
 fn test_repo_list_enter_initializes_tag_list_state() {
     let mut app = App::new(&create_test_context()).unwrap();
-    let repos = vec!["alpine".to_string(), "nginx".to_string()];
+    let repos = repos_from_names(vec!["alpine".to_string(), "nginx".to_string()]);
     app.handle_message(Message::RepositoriesLoaded(Ok(repos)));
 
     // Before Enter, tag_list_state should be default

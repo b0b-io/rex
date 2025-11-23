@@ -49,8 +49,8 @@ pub fn run(ctx: &crate::context::AppContext) -> Result<()> {
         Action::new("q", "Quit"),
     ]);
 
-    // Load repositories on startup
-    app.load_repositories();
+    // Load repositories on startup with configured concurrency
+    app.load_repositories(ctx.config.concurrency);
 
     // Create event handler with configured vim mode
     let event_handler = EventHandler::new(ctx.config.tui.vim_mode);
@@ -80,8 +80,11 @@ pub fn run(ctx: &crate::context::AppContext) -> Result<()> {
                 app::View::TagList(_) => {
                     app.tag_list_state.render(f, layout.content, &app.theme);
                 }
+                app::View::ImageDetails(_, _) => {
+                    app.details_state.render(f, layout.content, &app.theme);
+                }
                 _ => {
-                    // TODO: Implement other views
+                    // TODO: Implement other views (RegistrySelector, HelpPanel)
                 }
             }
 
