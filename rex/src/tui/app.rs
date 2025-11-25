@@ -15,7 +15,7 @@ use super::events::Event;
 use super::theme::Theme;
 use super::views::details::ImageDetailsState;
 use super::views::repos::{RepositoryItem, RepositoryListState};
-use super::views::tags::{TagItem, TagListState};
+use super::views::tags::TagListState;
 use super::worker;
 
 /// Views in the application.
@@ -40,8 +40,8 @@ pub enum View {
 pub enum Message {
     /// Repositories loaded successfully or with error (includes tag counts)
     RepositoriesLoaded(Result<Vec<RepositoryItem>>),
-    /// Tags loaded for a repository
-    TagsLoaded(String, Result<Vec<String>>),
+    /// Tags with metadata loaded for a repository
+    TagsLoaded(String, Result<Vec<crate::image::TagInfo>>),
     /// Manifest loaded for an image
     ManifestLoaded(String, String, Box<Result<librex::ManifestOrIndex>>),
     /// Configuration loaded for an image
@@ -94,6 +94,8 @@ pub struct App {
     pub theme: Theme,
     /// Whether vim mode is enabled
     pub vim_mode: bool,
+    /// Maximum number of parallel connections
+    concurrency: usize,
 }
 
 #[allow(dead_code)] // TODO: Remove when integrated into main TUI loop
@@ -154,6 +156,9 @@ impl App {
         // Get vim mode setting
         let vim_mode = ctx.config.tui.vim_mode;
 
+        // Get concurrency setting
+        let concurrency = ctx.config.concurrency;
+
         Ok(Self {
             current_view: View::RepositoryList,
             view_stack: vec![],
@@ -170,6 +175,7 @@ impl App {
             rx,
             theme,
             vim_mode,
+            concurrency,
         })
     }
 
@@ -254,14 +260,16 @@ impl App {
                     // Initialize tag list state for this repository
                     self.tag_list_state = TagListState::new(repo_name.clone());
                     // Load tags in background
-                    self.load_tags(repo_name.clone());
+                    let concurrency = self.concurrency;
+                    self.load_tags(repo_name.clone(), concurrency);
                     // Navigate to tag list view
                     self.push_view(View::TagList(repo_name));
                 }
             }
             Event::Refresh => {
-                // Reload repositories (concurrency of 8 is reasonable default)
-                self.load_repositories(8);
+                // Reload repositories
+                let concurrency = self.concurrency;
+                self.load_repositories(concurrency);
             }
             Event::Search => {
                 // TODO: Implement search mode in Phase 4
@@ -304,7 +312,8 @@ impl App {
             Event::Refresh => {
                 // Reload tags for the current repository
                 let repo = self.tag_list_state.repository.clone();
-                self.load_tags(repo);
+                let concurrency = self.concurrency;
+                self.load_tags(repo, concurrency);
             }
             Event::Search => {
                 // TODO: Implement search mode in Phase 4
@@ -447,21 +456,15 @@ impl App {
                 self.repo_list_state.loading = false;
                 // TODO: Show error banner
             }
-            Message::TagsLoaded(repo, Ok(tags)) => {
-                self.tags.insert(repo.clone(), tags.clone());
+            Message::TagsLoaded(repo, Ok(tag_infos)) => {
+                // Store tag names for internal tracking
+                let tag_names: Vec<String> = tag_infos.iter().map(|t| t.tag.clone()).collect();
+                self.tags.insert(repo.clone(), tag_names);
+
                 // Update tag list state if we're currently viewing this repository
                 if self.tag_list_state.repository == repo {
-                    // Convert tags to TagItem objects
-                    self.tag_list_state.items = tags
-                        .into_iter()
-                        .map(|tag| TagItem {
-                            tag,
-                            digest: String::new(), // TODO: Fetch actual digest from manifest
-                            size: 0,               // TODO: Calculate actual size
-                            platforms: vec![],     // TODO: Fetch platforms from manifest
-                            updated: None,         // TODO: Fetch last updated time
-                        })
-                        .collect();
+                    // Use TagInfo directly (shared type with full metadata)
+                    self.tag_list_state.items = tag_infos;
                     self.tag_list_state.loading = false;
                 }
             }
@@ -603,16 +606,23 @@ impl App {
     /// app.load_tags("alpine".to_string());
     /// assert!(app.tag_list_state.loading);
     /// ```
-    pub fn load_tags(&mut self, repository: String) {
+    pub fn load_tags(&mut self, repository: String, concurrency: usize) {
         self.tag_list_state.loading = true;
         let registry_url = self.current_registry.clone();
         let cache_dir = self.cache_dir.clone();
         let credentials = self.credentials.clone();
         let tx = self.tx.clone();
 
-        // Spawn worker thread to fetch tags
+        // Spawn worker thread to fetch tags with metadata
         std::thread::spawn(move || {
-            worker::fetch_tags(registry_url, repository, &cache_dir, credentials, tx);
+            worker::fetch_tags(
+                registry_url,
+                repository,
+                &cache_dir,
+                credentials,
+                tx,
+                concurrency,
+            );
         });
     }
 

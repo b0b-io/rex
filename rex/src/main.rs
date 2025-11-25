@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod context;
 mod format;
+mod image;
 mod tui;
 
 /// Rex - Container Registry Explorer

@@ -24,6 +24,14 @@ fn repos_from_names(names: Vec<String>) -> Vec<RepositoryItem> {
         .collect()
 }
 
+/// Helper to create TagInfo items from tag names for tests
+fn tags_from_names(names: Vec<String>) -> Vec<crate::image::TagInfo> {
+    names
+        .into_iter()
+        .map(|tag| crate::image::TagInfo::new(tag, "N/A".to_string(), 0, None, vec![]))
+        .collect()
+}
+
 #[test]
 fn test_app_new() {
     let ctx = create_test_context();
@@ -249,10 +257,14 @@ fn test_handle_repositories_loaded_error() {
 fn test_handle_tags_loaded_success() {
     let mut app = App::new(&create_test_context()).unwrap();
 
-    let tags = vec!["latest".to_string(), "3.19".to_string()];
-    app.handle_message(Message::TagsLoaded("alpine".to_string(), Ok(tags.clone())));
+    let tag_names = vec!["latest".to_string(), "3.19".to_string()];
+    let tag_infos = tags_from_names(tag_names.clone());
+    app.handle_message(Message::TagsLoaded(
+        "alpine".to_string(),
+        Ok(tag_infos.clone()),
+    ));
 
-    assert_eq!(app.tags.get("alpine"), Some(&tags));
+    assert_eq!(app.tags.get("alpine"), Some(&tag_names));
 }
 
 #[test]
@@ -269,20 +281,20 @@ fn test_handle_tags_loaded_error() {
 fn test_handle_tags_for_multiple_repositories() {
     let mut app = App::new(&create_test_context()).unwrap();
 
-    let alpine_tags = vec!["latest".to_string(), "3.19".to_string()];
-    let nginx_tags = vec!["latest".to_string(), "alpine".to_string()];
+    let alpine_tag_names = vec!["latest".to_string(), "3.19".to_string()];
+    let nginx_tag_names = vec!["latest".to_string(), "alpine".to_string()];
 
     app.handle_message(Message::TagsLoaded(
         "alpine".to_string(),
-        Ok(alpine_tags.clone()),
+        Ok(tags_from_names(alpine_tag_names.clone())),
     ));
     app.handle_message(Message::TagsLoaded(
         "nginx".to_string(),
-        Ok(nginx_tags.clone()),
+        Ok(tags_from_names(nginx_tag_names.clone())),
     ));
 
-    assert_eq!(app.tags.get("alpine"), Some(&alpine_tags));
-    assert_eq!(app.tags.get("nginx"), Some(&nginx_tags));
+    assert_eq!(app.tags.get("alpine"), Some(&alpine_tag_names));
+    assert_eq!(app.tags.get("nginx"), Some(&nginx_tag_names));
 }
 
 #[test]
@@ -297,7 +309,7 @@ fn test_process_messages_drains_queue() {
     .unwrap();
     tx.send(Message::TagsLoaded(
         "alpine".to_string(),
-        Ok(vec!["latest".to_string()]),
+        Ok(tags_from_names(vec!["latest".to_string()])),
     ))
     .unwrap();
 
@@ -516,7 +528,7 @@ fn test_tag_list_up_event() {
     app.current_view = View::TagList("alpine".to_string());
     app.tag_list_state = TagListState::new("alpine".to_string());
 
-    let tags = vec!["latest".to_string(), "3.19".to_string()];
+    let tags = tags_from_names(vec!["latest".to_string(), "3.19".to_string()]);
     app.handle_message(Message::TagsLoaded("alpine".to_string(), Ok(tags)));
 
     // Start at first item
@@ -539,7 +551,11 @@ fn test_tag_list_down_event() {
     app.current_view = View::TagList("alpine".to_string());
     app.tag_list_state = TagListState::new("alpine".to_string());
 
-    let tags = vec!["latest".to_string(), "3.19".to_string(), "3.18".to_string()];
+    let tags = tags_from_names(vec![
+        "latest".to_string(),
+        "3.19".to_string(),
+        "3.18".to_string(),
+    ]);
     app.handle_message(Message::TagsLoaded("alpine".to_string(), Ok(tags)));
 
     assert_eq!(app.tag_list_state.selected, 0);
@@ -559,7 +575,7 @@ fn test_tag_list_enter_navigates_to_image_details() {
     app.current_view = View::TagList("alpine".to_string());
     app.tag_list_state = TagListState::new("alpine".to_string());
 
-    let tags = vec!["latest".to_string(), "3.19".to_string()];
+    let tags = tags_from_names(vec!["latest".to_string(), "3.19".to_string()]);
     app.handle_message(Message::TagsLoaded("alpine".to_string(), Ok(tags)));
 
     // Select first tag and press Enter
@@ -610,7 +626,7 @@ fn test_load_tags_sets_loading_state() {
     app.tag_list_state = TagListState::new("alpine".to_string());
     assert!(!app.tag_list_state.loading);
 
-    app.load_tags("alpine".to_string());
+    app.load_tags("alpine".to_string(), 8);
 
     assert!(app.tag_list_state.loading);
 }
@@ -624,7 +640,8 @@ fn test_handle_tags_loaded_populates_tag_list_state() {
     app.tag_list_state = TagListState::new("alpine".to_string());
     app.tag_list_state.loading = true;
 
-    let tags = vec!["latest".to_string(), "3.19".to_string()];
+    let tag_names = vec!["latest".to_string(), "3.19".to_string()];
+    let tags = tags_from_names(tag_names.clone());
     app.handle_message(Message::TagsLoaded("alpine".to_string(), Ok(tags.clone())));
 
     // Should populate tag_list_state.items
@@ -633,8 +650,8 @@ fn test_handle_tags_loaded_populates_tag_list_state() {
     assert_eq!(app.tag_list_state.items[1].tag, "3.19");
     assert!(!app.tag_list_state.loading);
 
-    // Should also store in tags HashMap
-    assert_eq!(app.tags.get("alpine"), Some(&tags));
+    // Should also store in tags HashMap (as tag names)
+    assert_eq!(app.tags.get("alpine"), Some(&tag_names));
 }
 
 #[test]
@@ -647,23 +664,23 @@ fn test_handle_tags_loaded_only_updates_current_repository() {
     app.tag_list_state.loading = true;
 
     // Receive tags for nginx (different repository)
-    let nginx_tags = vec!["latest".to_string()];
+    let nginx_tag_names = vec!["latest".to_string()];
     app.handle_message(Message::TagsLoaded(
         "nginx".to_string(),
-        Ok(nginx_tags.clone()),
+        Ok(tags_from_names(nginx_tag_names.clone())),
     ));
 
     // Should NOT populate tag_list_state.items because we're viewing alpine
     assert_eq!(app.tag_list_state.items.len(), 0);
 
-    // But should store in tags HashMap
-    assert_eq!(app.tags.get("nginx"), Some(&nginx_tags));
+    // But should store in tags HashMap (as tag names)
+    assert_eq!(app.tags.get("nginx"), Some(&nginx_tag_names));
 
     // Now receive tags for alpine
-    let alpine_tags = vec!["latest".to_string(), "3.19".to_string()];
+    let alpine_tag_names = vec!["latest".to_string(), "3.19".to_string()];
     app.handle_message(Message::TagsLoaded(
         "alpine".to_string(),
-        Ok(alpine_tags.clone()),
+        Ok(tags_from_names(alpine_tag_names.clone())),
     ));
 
     // Should NOW populate tag_list_state.items

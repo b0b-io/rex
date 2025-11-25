@@ -10,19 +10,8 @@ use ratatui::{
 
 use crate::tui::theme::Theme;
 
-/// A repository item in the list.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)] // TODO: Remove when integrated into main TUI loop (Task 3.3)
-pub struct RepositoryItem {
-    /// Repository name
-    pub name: String,
-    /// Number of tags in this repository
-    pub tag_count: usize,
-    /// Total size of all images in bytes
-    pub total_size: u64,
-    /// Last updated timestamp (optional)
-    pub last_updated: Option<String>,
-}
+// Re-export RepositoryItem from shared image module
+pub use crate::image::RepositoryItem;
 
 /// State for the repository list view.
 #[derive(Debug, Clone)]
@@ -231,29 +220,11 @@ impl RepositoryListState {
 
                 let indicator = if i == self.selected { "▶ " } else { "  " };
 
-                // Format timestamp in local timezone
-                let updated_str = item
-                    .last_updated
-                    .as_ref()
-                    .map(|timestamp| {
-                        use chrono::{DateTime, Local};
-
-                        // Parse RFC3339 and convert to local timezone
-                        DateTime::parse_from_rfc3339(timestamp)
-                            .ok()
-                            .map(|dt| {
-                                let local: DateTime<Local> = dt.with_timezone(&Local);
-                                local.format("%Y-%m-%d %H:%M").to_string()
-                            })
-                            .unwrap_or_else(|| timestamp.clone())
-                    })
-                    .unwrap_or_else(|| "-".to_string());
-
                 Row::new(vec![
                     Cell::from(format!("{}{}", indicator, item.name)),
                     Cell::from(item.tag_count.to_string()),
-                    Cell::from(librex::format::format_size(item.total_size)),
-                    Cell::from(updated_str),
+                    Cell::from(item.total_size_display.clone()),
+                    Cell::from(item.last_updated.clone()),
                 ])
                 .style(style)
             })

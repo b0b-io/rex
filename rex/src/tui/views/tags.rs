@@ -10,21 +10,8 @@ use ratatui::{
 
 use crate::tui::theme::Theme;
 
-/// A tag item in the list.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)] // TODO: Remove when integrated into main TUI loop
-pub struct TagItem {
-    /// Tag name
-    pub tag: String,
-    /// Content digest
-    pub digest: String,
-    /// Total size in bytes
-    pub size: u64,
-    /// List of platforms (e.g., "linux/amd64", "linux/arm64")
-    pub platforms: Vec<String>,
-    /// Last updated timestamp (optional)
-    pub updated: Option<String>,
-}
+// Re-export TagInfo from shared image module as TagItem for TUI
+pub use crate::image::TagInfo as TagItem;
 
 /// State for the tag list view.
 #[derive(Debug, Clone)]
@@ -175,16 +162,17 @@ impl TagListState {
     /// * `area` - The rectangular area to render in
     /// * `theme` - The theme to use for styling
     pub fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
-        // Header row
+        // Header row - matches CLI output
         let header = Row::new(vec![
             Cell::from("TAG"),
             Cell::from("DIGEST"),
             Cell::from("SIZE"),
-            Cell::from("PLATFORMS"),
+            Cell::from("CREATED"),
+            Cell::from("PLATFORM"),
         ])
         .style(theme.title_style());
 
-        // Data rows
+        // Data rows - use pre-formatted strings from TagInfo
         let rows: Vec<Row> = self
             .items
             .iter()
@@ -198,44 +186,24 @@ impl TagListState {
 
                 let indicator = if i == self.selected { "▶ " } else { "  " };
 
-                // Truncate digest to first 12 characters for display
-                let digest_display = if item.digest.is_empty() {
-                    "-".to_string()
-                } else if item.digest.len() > 12 {
-                    format!("{}...", &item.digest[..12])
-                } else {
-                    item.digest.clone()
-                };
-
-                // Format size
-                let size_display = if item.size == 0 {
-                    "-".to_string()
-                } else {
-                    librex::format::format_size(item.size)
-                };
-
-                // Format platforms
-                let platforms_display = if item.platforms.is_empty() {
-                    "-".to_string()
-                } else {
-                    item.platforms.join(", ")
-                };
-
+                // All fields are already formatted in TagInfo
                 Row::new(vec![
                     Cell::from(format!("{}{}", indicator, item.tag)),
-                    Cell::from(digest_display),
-                    Cell::from(size_display),
-                    Cell::from(platforms_display),
+                    Cell::from(item.digest.clone()),
+                    Cell::from(item.size.clone()),
+                    Cell::from(item.created.clone()),
+                    Cell::from(item.platforms.clone()),
                 ])
                 .style(style)
             })
             .collect();
 
         let widths = [
-            Constraint::Percentage(25),
-            Constraint::Length(15),
-            Constraint::Length(12),
-            Constraint::Percentage(40),
+            Constraint::Percentage(25), // TAG
+            Constraint::Length(13),     // DIGEST (12 chars + space)
+            Constraint::Length(11),     // SIZE (e.g., "41.23 MiB")
+            Constraint::Length(13),     // CREATED (e.g., "2 days ago")
+            Constraint::Percentage(30), // PLATFORM
         ];
 
         let title = format!(" Tags for {} ", self.repository);

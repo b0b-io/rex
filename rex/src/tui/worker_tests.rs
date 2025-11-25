@@ -48,6 +48,7 @@ fn test_fetch_tags_sends_message() {
             test_cache_dir(),
             None,
             tx,
+            8,
         );
     });
 
@@ -126,6 +127,7 @@ fn test_fetch_tags_handles_connection_error() {
         test_cache_dir(),
         None,
         tx,
+        8,
     );
 
     let msg = rx.recv_timeout(Duration::from_secs(2));
@@ -190,6 +192,7 @@ fn test_multiple_workers_can_run_concurrently() {
             test_cache_dir(),
             None,
             tx2,
+            8,
         );
     });
 
