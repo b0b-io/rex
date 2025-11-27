@@ -1,29 +1,29 @@
 use super::*;
 
 #[test]
-fn test_image_info_creation() {
-    let image = ImageInfo::new("alpine".to_string(), 5);
+fn test_repository_item_creation() {
+    let item = RepositoryItem::new("alpine".to_string(), 5, 1024, None);
 
-    assert_eq!(image.name, "alpine");
-    assert_eq!(image.tags, 5);
+    assert_eq!(item.name, "alpine");
+    assert_eq!(item.tag_count, 5);
 }
 
 #[test]
-fn test_image_info_format_pretty() {
-    let image = ImageInfo::new("nginx".to_string(), 12);
+fn test_repository_item_format_pretty() {
+    let item = RepositoryItem::new("nginx".to_string(), 12, 2048, None);
 
-    let formatted = image.format_pretty();
+    let formatted = item.format_pretty();
     assert!(formatted.contains("nginx"));
     assert!(formatted.contains("12"));
 }
 
 #[test]
-fn test_image_info_serialization() {
-    let image = ImageInfo::new("redis".to_string(), 3);
+fn test_repository_item_serialization() {
+    let item = RepositoryItem::new("redis".to_string(), 3, 3072, None);
 
-    let json = serde_json::to_string(&image).unwrap();
+    let json = serde_json::to_string(&item).unwrap();
     assert!(json.contains("\"name\":\"redis\""));
-    assert!(json.contains("\"tags\":3"));
+    assert!(json.contains("\"tag_count\":3"));
 }
 
 #[test]

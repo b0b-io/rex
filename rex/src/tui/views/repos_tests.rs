@@ -17,18 +17,8 @@ fn test_repository_list_state_new() {
 fn test_select_next_moves_down() {
     let mut state = RepositoryListState::new();
     state.items = vec![
-        RepositoryItem {
-            name: "alpine".to_string(),
-            tag_count: 5,
-            total_size: 1024,
-            last_updated: None,
-        },
-        RepositoryItem {
-            name: "nginx".to_string(),
-            tag_count: 10,
-            total_size: 2048,
-            last_updated: None,
-        },
+        RepositoryItem::new("alpine".to_string(), 5, 1024, None),
+        RepositoryItem::new("nginx".to_string(), 10, 2048, None),
     ];
 
     assert_eq!(state.selected, 0);
@@ -39,12 +29,7 @@ fn test_select_next_moves_down() {
 #[test]
 fn test_select_next_at_end_stays_at_end() {
     let mut state = RepositoryListState::new();
-    state.items = vec![RepositoryItem {
-        name: "alpine".to_string(),
-        tag_count: 5,
-        total_size: 1024,
-        last_updated: None,
-    }];
+    state.items = vec![RepositoryItem::new("alpine".to_string(), 5, 1024, None)];
     state.selected = 0;
 
     state.select_next();
@@ -56,18 +41,8 @@ fn test_select_next_at_end_stays_at_end() {
 fn test_select_previous_moves_up() {
     let mut state = RepositoryListState::new();
     state.items = vec![
-        RepositoryItem {
-            name: "alpine".to_string(),
-            tag_count: 5,
-            total_size: 1024,
-            last_updated: None,
-        },
-        RepositoryItem {
-            name: "nginx".to_string(),
-            tag_count: 10,
-            total_size: 2048,
-            last_updated: None,
-        },
+        RepositoryItem::new("alpine".to_string(), 5, 1024, None),
+        RepositoryItem::new("nginx".to_string(), 10, 2048, None),
     ];
     state.selected = 1;
 
@@ -78,12 +53,7 @@ fn test_select_previous_moves_up() {
 #[test]
 fn test_select_previous_at_start_stays_at_start() {
     let mut state = RepositoryListState::new();
-    state.items = vec![RepositoryItem {
-        name: "alpine".to_string(),
-        tag_count: 5,
-        total_size: 1024,
-        last_updated: None,
-    }];
+    state.items = vec![RepositoryItem::new("alpine".to_string(), 5, 1024, None)];
     state.selected = 0;
 
     state.select_previous();
@@ -94,18 +64,8 @@ fn test_select_previous_at_start_stays_at_start() {
 fn test_selected_item_returns_current_item() {
     let mut state = RepositoryListState::new();
     state.items = vec![
-        RepositoryItem {
-            name: "alpine".to_string(),
-            tag_count: 5,
-            total_size: 1024,
-            last_updated: None,
-        },
-        RepositoryItem {
-            name: "nginx".to_string(),
-            tag_count: 10,
-            total_size: 2048,
-            last_updated: None,
-        },
+        RepositoryItem::new("alpine".to_string(), 5, 1024, None),
+        RepositoryItem::new("nginx".to_string(), 10, 2048, None),
     ];
     state.selected = 1;
 
@@ -124,18 +84,8 @@ fn test_selected_item_returns_none_when_empty() {
 fn test_filtered_items_returns_all_when_no_filter() {
     let mut state = RepositoryListState::new();
     state.items = vec![
-        RepositoryItem {
-            name: "alpine".to_string(),
-            tag_count: 5,
-            total_size: 1024,
-            last_updated: None,
-        },
-        RepositoryItem {
-            name: "nginx".to_string(),
-            tag_count: 10,
-            total_size: 2048,
-            last_updated: None,
-        },
+        RepositoryItem::new("alpine".to_string(), 5, 1024, None),
+        RepositoryItem::new("nginx".to_string(), 10, 2048, None),
     ];
 
     let filtered = state.filtered_items();
@@ -146,24 +96,9 @@ fn test_filtered_items_returns_all_when_no_filter() {
 fn test_filtered_items_filters_by_name() {
     let mut state = RepositoryListState::new();
     state.items = vec![
-        RepositoryItem {
-            name: "alpine".to_string(),
-            tag_count: 5,
-            total_size: 1024,
-            last_updated: None,
-        },
-        RepositoryItem {
-            name: "nginx".to_string(),
-            tag_count: 10,
-            total_size: 2048,
-            last_updated: None,
-        },
-        RepositoryItem {
-            name: "redis".to_string(),
-            tag_count: 8,
-            total_size: 3072,
-            last_updated: None,
-        },
+        RepositoryItem::new("alpine".to_string(), 5, 1024, None),
+        RepositoryItem::new("nginx".to_string(), 10, 2048, None),
+        RepositoryItem::new("redis".to_string(), 8, 3072, None),
     ];
     state.filter = "ng".to_string();
 
@@ -175,12 +110,7 @@ fn test_filtered_items_filters_by_name() {
 #[test]
 fn test_filtered_items_case_sensitive() {
     let mut state = RepositoryListState::new();
-    state.items = vec![RepositoryItem {
-        name: "Alpine".to_string(),
-        tag_count: 5,
-        total_size: 1024,
-        last_updated: None,
-    }];
+    state.items = vec![RepositoryItem::new("Alpine".to_string(), 5, 1024, None)];
     state.filter = "alp".to_string();
 
     let filtered = state.filtered_items();
