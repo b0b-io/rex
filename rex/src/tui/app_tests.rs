@@ -15,12 +15,7 @@ fn create_test_context() -> AppContext {
 fn repos_from_names(names: Vec<String>) -> Vec<RepositoryItem> {
     names
         .into_iter()
-        .map(|name| RepositoryItem {
-            name,
-            tag_count: 1,
-            total_size: 0,
-            last_updated: None,
-        })
+        .map(|name| RepositoryItem::new(name, 1, 0, None))
         .collect()
 }
 
