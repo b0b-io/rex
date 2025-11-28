@@ -337,6 +337,7 @@ impl Formattable for ImageInspect {
 /// # Arguments
 ///
 /// * `registry_url` - URL of the registry to query
+/// * `dockerhub_compat` - Whether to enable Docker Hub compatibility mode
 /// * `filter` - Optional filter pattern for fuzzy matching
 /// * `limit` - Optional limit on number of results
 ///
@@ -346,6 +347,7 @@ impl Formattable for ImageInspect {
 pub(crate) fn list_images(
     ctx: &crate::context::AppContext,
     registry_url: &str,
+    dockerhub_compat: bool,
     filter: Option<&str>,
     limit: Option<usize>,
 ) -> Result<Vec<RepositoryItem>, String> {
@@ -384,7 +386,8 @@ pub(crate) fn list_images(
     // (This call will be cached, so the fetcher won't duplicate the network request)
     let mut builder = librex::Rex::builder()
         .registry_url(registry_url)
-        .with_cache(cache_dir.clone());
+        .with_cache(cache_dir.clone())
+        .with_dockerhub_compat(dockerhub_compat);
 
     if let Some(ref creds) = credentials {
         builder = builder.with_credentials(creds.clone());
@@ -580,7 +583,7 @@ pub(crate) fn get_image_details(
         .map_err(|e| format!("Failed to connect to registry: {}", e))?;
 
     // Parse the reference to validate it
-    let reference = librex::reference::Reference::from_str(reference_str)
+    let _reference = librex::reference::Reference::from_str(reference_str)
         .map_err(|e| format!("Invalid image reference: {}", e))?;
 
     // Get the manifest (Rex::get_manifest expects a string reference)
@@ -604,7 +607,7 @@ pub(crate) fn get_image_details(
 
                 // Fetch config blob
                 let config_bytes = rex
-                    .get_blob(reference.repository(), &config_digest)
+                    .get_blob_for_reference(reference_str, &config_digest)
                     .map_err(|e| format!("Failed to fetch config blob: {}", e))?;
 
                 // Parse config JSON
@@ -804,7 +807,7 @@ pub(crate) fn get_image_inspect(
         .map_err(|e| format!("Invalid config digest: {}", e))?;
 
     let config_bytes = rex
-        .get_blob(reference.repository(), &config_digest)
+        .get_blob_for_reference(reference_str, &config_digest)
         .map_err(|e| format!("Failed to fetch config blob: {}", e))?;
 
     let config: librex::oci::ImageConfiguration = serde_json::from_slice(&config_bytes)
@@ -987,6 +990,49 @@ pub(crate) fn get_registry_url() -> Result<String, String> {
 
     // Fall back to localhost:5000
     Ok("http://localhost:5000".to_string())
+}
+
+/// Get the current registry entry (including dockerhub_compat flag) from config
+pub(crate) fn get_registry_entry() -> Result<config::RegistryEntry, String> {
+    let config_path = config::get_config_path();
+
+    // Try to load config
+    let config = match config::Config::load(&config_path) {
+        Ok(cfg) => cfg,
+        Err(_) => {
+            // No config, use default
+            return Ok(config::RegistryEntry {
+                name: "default".to_string(),
+                url: "http://localhost:5000".to_string(),
+                dockerhub_compat: false,
+            });
+        }
+    };
+
+    // Get default registry
+    if let Some(default_name) = config.registries.default {
+        // Find the registry by name
+        if let Some(registry) = config
+            .registries
+            .list
+            .iter()
+            .find(|r| r.name == default_name)
+        {
+            return Ok(registry.clone());
+        }
+    }
+
+    // No default set, use first registry if available
+    if let Some(registry) = config.registries.list.first() {
+        return Ok(registry.clone());
+    }
+
+    // Fall back to localhost:5000
+    Ok(config::RegistryEntry {
+        name: "default".to_string(),
+        url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
+    })
 }
 
 /// Parse a platform string into (os, architecture, variant) components.

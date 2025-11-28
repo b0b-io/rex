@@ -146,7 +146,7 @@ impl Rex {
     /// ```
     pub fn connect(registry_url: &str) -> Result<Self> {
         let client = Client::new(registry_url, None)?;
-        let registry = Registry::new(client, None, None);
+        let registry = Registry::new(client, None, None, false);
 
         Ok(Self {
             registry,
@@ -441,6 +441,28 @@ impl Rex {
     ///     Ok(())
     /// }
     /// ```
+    /// Retrieves a blob for a specific reference, respecting Docker Hub compatibility settings.
+    ///
+    /// This is a convenience method that automatically uses the correct repository name
+    /// based on the registry's dockerhub_compat setting.
+    ///
+    /// # Arguments
+    ///
+    /// * `reference_str` - The image reference string
+    /// * `digest` - The content digest
+    ///
+    /// # Returns
+    ///
+    /// The raw blob content as bytes.
+    pub fn get_blob_for_reference(
+        &mut self,
+        reference_str: &str,
+        digest: &Digest,
+    ) -> Result<Vec<u8>> {
+        let reference = reference_str.parse::<Reference>()?;
+        self.registry.get_blob_for_reference(&reference, digest)
+    }
+
     pub fn get_blob(&mut self, repository: &str, digest: &Digest) -> Result<Vec<u8>> {
         self.registry.get_blob(repository, digest)
     }
@@ -709,6 +731,7 @@ pub struct RexBuilder {
     cache_ttl: Option<CacheTtl>,
     memory_capacity: Option<usize>,
     credentials: Option<Credentials>,
+    dockerhub_compat: Option<bool>,
 }
 
 impl RexBuilder {
@@ -720,6 +743,7 @@ impl RexBuilder {
             cache_ttl: None,
             memory_capacity: None,
             credentials: None,
+            dockerhub_compat: None,
         }
     }
 
@@ -753,6 +777,16 @@ impl RexBuilder {
         self
     }
 
+    /// Enable or disable Docker Hub compatibility mode.
+    ///
+    /// When enabled (true), the "library/" prefix is kept for simple repository names.
+    /// When disabled (false, default), the auto-added "library/" prefix is stripped
+    /// for non-Docker Hub registries.
+    pub fn with_dockerhub_compat(mut self, enabled: bool) -> Self {
+        self.dockerhub_compat = Some(enabled);
+        self
+    }
+
     /// Build the `Rex` instance.
     pub fn build(self) -> Result<Rex> {
         let registry_url = self
@@ -770,7 +804,8 @@ impl RexBuilder {
             None
         };
 
-        let registry = Registry::new(client, cache, self.credentials);
+        let dockerhub_compat = self.dockerhub_compat.unwrap_or(false);
+        let registry = Registry::new(client, cache, self.credentials, dockerhub_compat);
 
         Ok(Rex {
             registry,

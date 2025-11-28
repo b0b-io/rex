@@ -27,6 +27,7 @@ fn test_init_registry_to_existing_registries() {
     config.registries.list.push(RegistryEntry {
         name: "existing".to_string(),
         url: "http://example.com".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -47,6 +48,7 @@ fn test_init_registry_duplicate_name_fails() {
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -109,6 +111,7 @@ fn test_init_second_registry_does_not_change_default() {
     config.registries.list.push(RegistryEntry {
         name: "first".to_string(),
         url: "http://example.com".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -144,10 +147,12 @@ fn test_list_registries_with_entries() {
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.registries.list.push(RegistryEntry {
         name: "dockerhub".to_string(),
         url: "https://registry-1.docker.io".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -271,10 +276,12 @@ fn test_remove_registry_existing() {
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.registries.list.push(RegistryEntry {
         name: "dockerhub".to_string(),
         url: "https://registry-1.docker.io".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -295,6 +302,7 @@ fn test_remove_registry_nonexistent() {
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -313,6 +321,7 @@ fn test_remove_last_registry() {
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -334,10 +343,12 @@ fn test_remove_default_registry_clears_default() {
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.registries.list.push(RegistryEntry {
         name: "dockerhub".to_string(),
         url: "https://registry-1.docker.io".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -373,10 +384,12 @@ fn test_use_registry_existing() {
     config.registries.list.push(RegistryEntry {
         name: "dockerhub".to_string(),
         url: "https://registry-1.docker.io".to_string(),
+        dockerhub_compat: false,
     });
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -396,6 +409,7 @@ fn test_use_registry_nonexistent() {
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -413,6 +427,7 @@ fn test_use_registry_when_none_set() {
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -446,6 +461,7 @@ fn test_show_registry_existing() {
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -465,6 +481,7 @@ fn test_show_registry_nonexistent() {
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 
@@ -483,6 +500,7 @@ fn test_show_registry_with_default_marker() {
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
     config.save(&config_path).unwrap();
 

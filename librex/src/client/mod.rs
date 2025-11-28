@@ -60,6 +60,9 @@ pub struct ClientConfig {
     pub timeout_seconds: u64,
     /// Maximum idle connections per host (default: 10)
     pub max_idle_per_host: usize,
+    /// Enable Docker Hub compatibility mode (adds "library/" prefix for simple names)
+    /// Default: false (works with Zot, GHCR, and most registries)
+    pub dockerhub_compat: bool,
 }
 
 impl Default for ClientConfig {
@@ -67,6 +70,7 @@ impl Default for ClientConfig {
         Self {
             timeout_seconds: 30,
             max_idle_per_host: 10,
+            dockerhub_compat: false,
         }
     }
 }
@@ -118,6 +122,24 @@ impl ClientConfig {
     /// ```
     pub fn with_max_idle_per_host(mut self, max: usize) -> Self {
         self.max_idle_per_host = max;
+        self
+    }
+
+    /// Sets the Docker Hub compatibility mode.
+    ///
+    /// When enabled, the client expects the "library/" prefix for simple repository names.
+    /// When disabled (default), it works with registries that don't use this convention.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use librex::client::ClientConfig;
+    ///
+    /// let config = ClientConfig::new().with_dockerhub_compat(true);
+    /// assert_eq!(config.dockerhub_compat, true);
+    /// ```
+    pub fn with_dockerhub_compat(mut self, enabled: bool) -> Self {
+        self.dockerhub_compat = enabled;
         self
     }
 }

@@ -7,7 +7,7 @@ use tempfile::tempdir;
 #[test]
 fn test_registry_new() {
     let client = Client::new("http://localhost:5000", None).unwrap();
-    let registry = Registry::new(client, None, None);
+    let registry = Registry::new(client, None, None, false);
 
     assert!(registry.cache.is_none());
     assert!(registry.credentials.is_none());
@@ -21,7 +21,7 @@ fn test_registry_new_with_cache() {
     let capacity = NonZeroUsize::new(100).unwrap();
     let cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
-    let registry = Registry::new(client, Some(cache), None);
+    let registry = Registry::new(client, Some(cache), None, false);
 
     assert!(registry.cache.is_some());
     assert!(registry.credentials.is_none());
@@ -30,7 +30,7 @@ fn test_registry_new_with_cache() {
 #[test]
 fn test_registry_credentials_management() {
     let client = Client::new("http://localhost:5000", None).unwrap();
-    let mut registry = Registry::new(client, None, None);
+    let mut registry = Registry::new(client, None, None, false);
 
     // Initially no credentials
     assert!(registry.credentials().is_none());
@@ -389,7 +389,7 @@ fn test_list_repositories_without_cache() {
         .create();
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, None, None);
+    let mut registry = Registry::new(client, None, None, false);
 
     let repos = registry.list_repositories().unwrap();
 
@@ -420,7 +420,7 @@ fn test_list_repositories_with_cache() {
     let cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, Some(cache), None);
+    let mut registry = Registry::new(client, Some(cache), None, false);
 
     // First call - should hit the server
     let repos1 = registry.list_repositories().unwrap();
@@ -444,7 +444,7 @@ fn test_list_tags_without_cache() {
         .create();
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, None, None);
+    let mut registry = Registry::new(client, None, None, false);
 
     let tags = registry.list_tags("alpine").unwrap();
 
@@ -475,7 +475,7 @@ fn test_list_tags_with_cache() {
     let cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, Some(cache), None);
+    let mut registry = Registry::new(client, Some(cache), None, false);
 
     // First call - should hit the server
     let tags1 = registry.list_tags("alpine").unwrap();
@@ -495,8 +495,9 @@ fn test_get_manifest_without_cache() {
     let mut server = mockito::Server::new();
     let manifest_body = r#"{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","size":1234,"digest":"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"layers":[]}"#;
 
+    // With dockerhub_compat=false, "alpine" strips "library/" prefix
     let mock = server
-        .mock("GET", "/v2/library/alpine/manifests/latest")
+        .mock("GET", "/v2/alpine/manifests/latest")
         .with_status(200)
         .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
         .with_header("docker-content-digest", "sha256:abc123")
@@ -504,7 +505,7 @@ fn test_get_manifest_without_cache() {
         .create();
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, None, None);
+    let mut registry = Registry::new(client, None, None, false);
 
     let reference = Reference::from_str("alpine:latest").unwrap();
     let result = registry.get_manifest(&reference);
@@ -533,8 +534,9 @@ fn test_get_manifest_with_cache() {
     let mut server = mockito::Server::new();
     let manifest_body = r#"{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","size":1234,"digest":"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"layers":[]}"#;
 
+    // With dockerhub_compat=false, "alpine" strips "library/" prefix
     let mock = server
-        .mock("GET", "/v2/library/alpine/manifests/latest")
+        .mock("GET", "/v2/alpine/manifests/latest")
         .with_status(200)
         .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
         .with_header("docker-content-digest", "sha256:abc123")
@@ -548,7 +550,7 @@ fn test_get_manifest_with_cache() {
     let cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, Some(cache), None);
+    let mut registry = Registry::new(client, Some(cache), None, false);
 
     let reference = Reference::from_str("alpine:latest").unwrap();
 
@@ -594,7 +596,7 @@ fn test_get_blob_without_cache() {
         .create();
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, None, None);
+    let mut registry = Registry::new(client, None, None, false);
 
     let digest_obj = Digest::from_str(&digest).unwrap();
     let blob = registry.get_blob("alpine", &digest_obj).unwrap();
@@ -633,7 +635,7 @@ fn test_get_blob_with_cache() {
     let cache = Cache::new(temp_dir.path().to_path_buf(), ttl, capacity);
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, Some(cache), None);
+    let mut registry = Registry::new(client, Some(cache), None, false);
 
     let digest_obj = Digest::from_str(&digest).unwrap();
 
@@ -658,7 +660,7 @@ fn test_check_version_success() {
         .create();
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, None, None);
+    let mut registry = Registry::new(client, None, None, false);
 
     let result = registry.check_version();
 
@@ -676,7 +678,7 @@ fn test_check_version_failure() {
         .create();
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, None, None);
+    let mut registry = Registry::new(client, None, None, false);
 
     let result = registry.check_version();
 
@@ -694,7 +696,7 @@ fn test_list_repositories_error() {
         .create();
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, None, None);
+    let mut registry = Registry::new(client, None, None, false);
 
     let result = registry.list_repositories();
 
@@ -712,10 +714,191 @@ fn test_list_tags_error() {
         .create();
 
     let client = Client::new(&server.url(), None).unwrap();
-    let mut registry = Registry::new(client, None, None);
+    let mut registry = Registry::new(client, None, None, false);
 
     let result = registry.list_tags("alpine");
 
     mock.assert();
     assert!(result.is_err());
+}
+
+// Tests for dockerhub_compat functionality
+
+#[test]
+fn test_get_manifest_strips_library_prefix_when_dockerhub_compat_false() {
+    use std::str::FromStr;
+
+    let mut server = mockito::Server::new();
+    let manifest_body = r#"{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","size":1234,"digest":"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"layers":[]}"#;
+
+    // With dockerhub_compat=false, "alpine" should strip the auto-added "library/" prefix
+    // So the URL should be "/v2/alpine/manifests/latest" not "/v2/library/alpine/manifests/latest"
+    let mock = server
+        .mock("GET", "/v2/alpine/manifests/latest")
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+        .with_header("docker-content-digest", "sha256:abc123")
+        .with_body(manifest_body)
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None, false); // dockerhub_compat = false
+
+    let reference = Reference::from_str("alpine:latest").unwrap();
+    let result = registry.get_manifest(&reference);
+
+    mock.assert();
+
+    match result {
+        Ok((manifest_or_index, digest)) => {
+            assert!(manifest_or_index.is_manifest());
+            assert_eq!(digest, "sha256:abc123");
+        }
+        Err(e) => {
+            panic!("Expected success but got error: {:?}", e);
+        }
+    }
+}
+
+#[test]
+fn test_get_manifest_keeps_library_prefix_when_dockerhub_compat_true() {
+    use std::str::FromStr;
+
+    let mut server = mockito::Server::new();
+    let manifest_body = r#"{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","size":1234,"digest":"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"layers":[]}"#;
+
+    // With dockerhub_compat=true, "alpine" should keep the auto-added "library/" prefix
+    // So the URL should be "/v2/library/alpine/manifests/latest"
+    let mock = server
+        .mock("GET", "/v2/library/alpine/manifests/latest")
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+        .with_header("docker-content-digest", "sha256:abc123")
+        .with_body(manifest_body)
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None, true); // dockerhub_compat = true
+
+    let reference = Reference::from_str("alpine:latest").unwrap();
+    let result = registry.get_manifest(&reference);
+
+    mock.assert();
+
+    match result {
+        Ok((manifest_or_index, digest)) => {
+            assert!(manifest_or_index.is_manifest());
+            assert_eq!(digest, "sha256:abc123");
+        }
+        Err(e) => {
+            panic!("Expected success but got error: {:?}", e);
+        }
+    }
+}
+
+#[test]
+fn test_get_manifest_preserves_explicit_library_path_when_dockerhub_compat_false() {
+    use std::str::FromStr;
+
+    let mut server = mockito::Server::new();
+    let manifest_body = r#"{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","size":1234,"digest":"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"layers":[]}"#;
+
+    // Even with dockerhub_compat=false, a nested path like "library/org/repo" should be preserved
+    // because the slash after "library/" indicates it's user-provided, not auto-added
+    let mock = server
+        .mock("GET", "/v2/library/org/myrepo/manifests/latest")
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+        .with_header("docker-content-digest", "sha256:abc123")
+        .with_body(manifest_body)
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None, false); // dockerhub_compat = false
+
+    let reference = Reference::from_str("library/org/myrepo:latest").unwrap();
+    let result = registry.get_manifest(&reference);
+
+    mock.assert();
+
+    match result {
+        Ok((manifest_or_index, digest)) => {
+            assert!(manifest_or_index.is_manifest());
+            assert_eq!(digest, "sha256:abc123");
+        }
+        Err(e) => {
+            panic!("Expected success but got error: {:?}", e);
+        }
+    }
+}
+
+#[test]
+fn test_get_manifest_with_org_name_when_dockerhub_compat_false() {
+    use std::str::FromStr;
+
+    let mut server = mockito::Server::new();
+    let manifest_body = r#"{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","size":1234,"digest":"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"layers":[]}"#;
+
+    // With dockerhub_compat=false, "myorg/myrepo" should be used as-is (no "library/" prefix added)
+    let mock = server
+        .mock("GET", "/v2/myorg/myrepo/manifests/latest")
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+        .with_header("docker-content-digest", "sha256:abc123")
+        .with_body(manifest_body)
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None, false); // dockerhub_compat = false
+
+    let reference = Reference::from_str("myorg/myrepo:latest").unwrap();
+    let result = registry.get_manifest(&reference);
+
+    mock.assert();
+
+    match result {
+        Ok((manifest_or_index, digest)) => {
+            assert!(manifest_or_index.is_manifest());
+            assert_eq!(digest, "sha256:abc123");
+        }
+        Err(e) => {
+            panic!("Expected success but got error: {:?}", e);
+        }
+    }
+}
+
+#[test]
+fn test_get_manifest_by_digest_strips_library_when_dockerhub_compat_false() {
+    use std::str::FromStr;
+
+    let mut server = mockito::Server::new();
+    let manifest_body = r#"{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","size":1234,"digest":"sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"},"layers":[]}"#;
+    let digest = "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+
+    // With dockerhub_compat=false, digest-based reference should also strip "library/"
+    let mock = server
+        .mock("GET", format!("/v2/alpine/manifests/{}", digest).as_str())
+        .with_status(200)
+        .with_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+        .with_header("docker-content-digest", digest)
+        .with_body(manifest_body)
+        .create();
+
+    let client = Client::new(&server.url(), None).unwrap();
+    let mut registry = Registry::new(client, None, None, false); // dockerhub_compat = false
+
+    let reference = Reference::from_str(&format!("alpine@{}", digest)).unwrap();
+    let result = registry.get_manifest(&reference);
+
+    mock.assert();
+
+    match result {
+        Ok((manifest_or_index, returned_digest)) => {
+            assert!(manifest_or_index.is_manifest());
+            assert_eq!(returned_digest, digest);
+        }
+        Err(e) => {
+            panic!("Expected success but got error: {:?}", e);
+        }
+    }
 }

@@ -20,6 +20,7 @@ fn test_config_format_pretty_with_registries() {
     config.registries.list.push(config::RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
 
     let output = config.format_pretty();

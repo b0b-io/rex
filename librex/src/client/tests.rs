@@ -178,6 +178,38 @@ fn test_client_new_uses_default_config() {
     assert!(client.is_ok());
 }
 
+#[test]
+fn test_client_config_dockerhub_compat_default() {
+    use super::ClientConfig;
+
+    let config = ClientConfig::default();
+    assert_eq!(config.dockerhub_compat, false);
+}
+
+#[test]
+fn test_client_config_with_dockerhub_compat() {
+    use super::ClientConfig;
+
+    let config = ClientConfig::new().with_dockerhub_compat(true);
+    assert_eq!(config.dockerhub_compat, true);
+
+    let config2 = ClientConfig::new().with_dockerhub_compat(false);
+    assert_eq!(config2.dockerhub_compat, false);
+}
+
+#[test]
+fn test_client_config_builder_chaining_with_dockerhub_compat() {
+    use super::ClientConfig;
+
+    let config = ClientConfig::new()
+        .with_timeout(120)
+        .with_max_idle_per_host(50)
+        .with_dockerhub_compat(true);
+    assert_eq!(config.timeout_seconds, 120);
+    assert_eq!(config.max_idle_per_host, 50);
+    assert_eq!(config.dockerhub_compat, true);
+}
+
 // Tests for catalog operations
 
 #[test]

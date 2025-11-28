@@ -205,6 +205,7 @@ pub(crate) fn init_registry(config_path: &PathBuf, name: &str, url: &str) -> Res
     config.registries.list.push(RegistryEntry {
         name: name.to_string(),
         url: normalized_url,
+        dockerhub_compat: false, // Default to false for most registries
     });
 
     // Set as default if this is the first registry

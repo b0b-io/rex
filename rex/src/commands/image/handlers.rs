@@ -23,9 +23,9 @@ pub fn handle_image_list(
         );
     }
 
-    // Get registry URL from config
-    let registry_url = match get_registry_url() {
-        Ok(url) => url,
+    // Get registry entry from config
+    let registry_entry = match get_registry_entry() {
+        Ok(entry) => entry,
         Err(e) => {
             format::error(ctx, &e);
             std::process::exit(1);
@@ -33,7 +33,13 @@ pub fn handle_image_list(
     };
 
     // List images
-    let images = match list_images(ctx, &registry_url, filter, limit) {
+    let images = match list_images(
+        ctx,
+        &registry_entry.url,
+        registry_entry.dockerhub_compat,
+        filter,
+        limit,
+    ) {
         Ok(imgs) => imgs,
         Err(e) => {
             format::error(ctx, &e);

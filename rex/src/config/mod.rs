@@ -134,6 +134,10 @@ pub struct RegistryEntry {
     pub name: String,
     /// Registry URL
     pub url: String,
+    /// Enable Docker Hub compatibility mode (adds "library/" prefix for simple names)
+    /// Default: false (works with Zot, GHCR, and most registries)
+    #[serde(default)]
+    pub dockerhub_compat: bool,
 }
 
 impl Config {

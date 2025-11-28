@@ -42,6 +42,8 @@ pub struct Registry {
     cache: Option<Cache>,
     /// Optional credentials for authentication.
     credentials: Option<Credentials>,
+    /// Docker Hub compatibility mode (strips auto-added "library/" prefix when false).
+    dockerhub_compat: bool,
 }
 
 impl Registry {
@@ -52,6 +54,7 @@ impl Registry {
     /// * `client` - HTTP client configured for the registry
     /// * `cache` - Optional cache for performance optimization
     /// * `credentials` - Optional credentials for authentication
+    /// * `dockerhub_compat` - Enable Docker Hub compatibility (keeps "library/" prefix)
     ///
     /// # Examples
     ///
@@ -60,13 +63,19 @@ impl Registry {
     /// use librex::registry::Registry;
     ///
     /// let client = Client::new("http://localhost:5000", None).unwrap();
-    /// let registry = Registry::new(client, None, None);
+    /// let registry = Registry::new(client, None, None, false);
     /// ```
-    pub fn new(client: Client, cache: Option<Cache>, credentials: Option<Credentials>) -> Self {
+    pub fn new(
+        client: Client,
+        cache: Option<Cache>,
+        credentials: Option<Credentials>,
+        dockerhub_compat: bool,
+    ) -> Self {
         Self {
             client,
             cache,
             credentials,
+            dockerhub_compat,
         }
     }
 
@@ -87,7 +96,7 @@ impl Registry {
     /// #
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
-    /// let mut registry = Registry::new(client, None, None);
+    /// let mut registry = Registry::new(client, None, None, false);
     ///
     /// let repos = registry.list_repositories()?;
     /// for repo in repos {
@@ -138,7 +147,7 @@ impl Registry {
     /// #
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
-    /// let mut registry = Registry::new(client, None, None);
+    /// let mut registry = Registry::new(client, None, None, false);
     ///
     /// let tags = registry.list_tags("alpine")?;
     /// for tag in tags {
@@ -197,7 +206,7 @@ impl Registry {
     /// #
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
-    /// let mut registry = Registry::new(client, None, None);
+    /// let mut registry = Registry::new(client, None, None, false);
     /// let reference = Reference::from_str("alpine:latest")?;
     ///
     /// let (manifest_or_index, digest) = registry.get_manifest(&reference)?;
@@ -216,12 +225,16 @@ impl Registry {
     pub fn get_manifest(&mut self, reference: &Reference) -> Result<(ManifestOrIndex, String)> {
         // For digest references, we can cache by digest
         let cache_key = if let Some(digest) = reference.digest() {
-            format!("{}/manifests/{}", reference.repository(), digest)
+            format!(
+                "{}/manifests/{}",
+                reference.repository_for_registry(self.dockerhub_compat),
+                digest
+            )
         } else {
             // Tag-based references change over time, so we use a different cache key
             format!(
                 "{}/tags/{}/manifest",
-                reference.repository(),
+                reference.repository_for_registry(self.dockerhub_compat),
                 reference.tag().unwrap_or("latest")
             )
         };
@@ -260,9 +273,10 @@ impl Registry {
             reference.tag().unwrap_or("latest")
         };
 
-        let (manifest_bytes, digest) = self
-            .client
-            .fetch_manifest(reference.repository(), reference_str)?;
+        let (manifest_bytes, digest) = self.client.fetch_manifest(
+            reference.repository_for_registry(self.dockerhub_compat),
+            reference_str,
+        )?;
 
         // Parse the manifest or index
         let manifest_or_index = ManifestOrIndex::from_bytes(&manifest_bytes)?;
@@ -273,6 +287,28 @@ impl Registry {
         }
 
         Ok((manifest_or_index, digest))
+    }
+
+    /// Retrieves a blob (layer or config) for a reference.
+    ///
+    /// This is a convenience method that extracts the repository name from a Reference
+    /// and respects the dockerhub_compat setting.
+    ///
+    /// # Arguments
+    ///
+    /// * `reference` - The image reference
+    /// * `digest` - The content digest of the blob
+    ///
+    /// # Returns
+    ///
+    /// The raw blob content as bytes.
+    pub fn get_blob_for_reference(
+        &mut self,
+        reference: &Reference,
+        digest: &Digest,
+    ) -> Result<Vec<u8>> {
+        let repository = reference.repository_for_registry(self.dockerhub_compat);
+        self.get_blob(repository, digest)
     }
 
     /// Retrieves a blob (layer or config) by digest.
@@ -300,7 +336,7 @@ impl Registry {
     /// #
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
-    /// let mut registry = Registry::new(client, None, None);
+    /// let mut registry = Registry::new(client, None, None, false);
     /// let digest = Digest::from_str("sha256:abc123...")?;
     ///
     /// let blob = registry.get_blob("alpine", &digest)?;
@@ -346,7 +382,7 @@ impl Registry {
     /// #
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
-    /// let mut registry = Registry::new(client, None, None);
+    /// let mut registry = Registry::new(client, None, None, false);
     ///
     /// match registry.check_version() {
     ///     Ok(_) => println!("Registry is accessible"),
@@ -401,7 +437,7 @@ impl Registry {
     /// #
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
-    /// let mut registry = Registry::new(client, None, None);
+    /// let mut registry = Registry::new(client, None, None, false);
     ///
     /// registry.delete_tag("alpine", "latest")?;
     /// println!("Tag deleted successfully");
@@ -464,7 +500,7 @@ impl Registry {
     /// #
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
-    /// let mut registry = Registry::new(client, None, None);
+    /// let mut registry = Registry::new(client, None, None, false);
     ///
     /// let digest = "sha256:abc123...";
     /// registry.delete_manifest("alpine", digest)?;
@@ -513,7 +549,7 @@ impl Registry {
     /// #
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let client = Client::new("http://localhost:5000", None)?;
-    /// let mut registry = Registry::new(client, None, None);
+    /// let mut registry = Registry::new(client, None, None, false);
     ///
     /// let deleted = registry.delete_all_tags("alpine")?;
     /// println!("Deleted {} tags", deleted.len());

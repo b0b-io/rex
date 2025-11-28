@@ -97,3 +97,72 @@ fn test_reference_inner_accessor() {
     let reference = Reference::from_str(valid_ref).unwrap();
     assert_eq!(reference.inner().to_string(), valid_ref);
 }
+
+#[test]
+fn test_repository_for_registry_strips_library_when_compat_false() {
+    // "golang" → parsed as "library/golang" → returns "golang" when dockerhub_compat=false
+    let reference = Reference::from_str("golang").unwrap();
+    assert_eq!(reference.repository_for_registry(false), "golang");
+    assert_eq!(reference.repository_for_registry(true), "library/golang");
+}
+
+#[test]
+fn test_repository_for_registry_with_tag() {
+    // "golang:1.25" → parsed as "library/golang" → returns "golang" when dockerhub_compat=false
+    let reference = Reference::from_str("golang:1.25").unwrap();
+    assert_eq!(reference.repository_for_registry(false), "golang");
+    assert_eq!(reference.repository_for_registry(true), "library/golang");
+}
+
+#[test]
+fn test_repository_for_registry_explicit_library_simple_name() {
+    // "library/myrepo" → parsed as "library/myrepo" by oci-spec
+    // Since "myrepo" has no slash, we can't distinguish if user typed "myrepo" or "library/myrepo"
+    // With dockerhub_compat=false, we strip it; with =true, we keep it
+    let reference = Reference::from_str("library/myrepo").unwrap();
+    assert_eq!(reference.repository_for_registry(false), "myrepo");
+    assert_eq!(reference.repository_for_registry(true), "library/myrepo");
+}
+
+#[test]
+fn test_repository_for_registry_with_org() {
+    // "myorg/repo" → kept as "myorg/repo" (no library prefix)
+    let reference = Reference::from_str("myorg/repo").unwrap();
+    assert_eq!(reference.repository_for_registry(false), "myorg/repo");
+    assert_eq!(reference.repository_for_registry(true), "myorg/repo");
+}
+
+#[test]
+fn test_repository_for_registry_with_nested_path() {
+    // "library/org/repo" → kept (user explicitly provided nested path)
+    let reference = Reference::from_str("library/org/repo").unwrap();
+    assert_eq!(reference.repository_for_registry(false), "library/org/repo");
+    assert_eq!(reference.repository_for_registry(true), "library/org/repo");
+}
+
+#[test]
+fn test_repository_for_registry_with_registry_prefix() {
+    // With explicit registry, oci-spec doesn't add "library/" prefix
+    let reference = Reference::from_str("localhost:5000/golang:latest").unwrap();
+    assert_eq!(reference.repository_for_registry(false), "golang");
+    assert_eq!(reference.repository_for_registry(true), "golang");
+}
+
+#[test]
+fn test_repository_for_registry_with_digest() {
+    // Works with digest references too (needs full sha256 digest)
+    let reference = Reference::from_str(
+        "golang@sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+    )
+    .unwrap();
+    assert_eq!(reference.repository_for_registry(false), "golang");
+    assert_eq!(reference.repository_for_registry(true), "library/golang");
+}
+
+#[test]
+fn test_repository_for_registry_ghcr_style() {
+    // GHCR style: "ghcr.io/owner/repo"
+    let reference = Reference::from_str("ghcr.io/owner/repo:latest").unwrap();
+    assert_eq!(reference.repository_for_registry(false), "owner/repo");
+    assert_eq!(reference.repository_for_registry(true), "owner/repo");
+}

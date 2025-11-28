@@ -211,9 +211,11 @@ fn test_registry_entry_creation() {
     let entry = RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     };
     assert_eq!(entry.name, "local");
     assert_eq!(entry.url, "http://localhost:5000");
+    assert_eq!(entry.dockerhub_compat, false);
 }
 
 #[test]
@@ -223,10 +225,12 @@ fn test_config_with_registries_serialization() {
     config.registries.list.push(RegistryEntry {
         name: "dockerhub".to_string(),
         url: "https://registry-1.docker.io".to_string(),
+        dockerhub_compat: true,
     });
     config.registries.list.push(RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     });
 
     let toml_str = toml::to_string(&config).unwrap();
@@ -235,6 +239,7 @@ fn test_config_with_registries_serialization() {
     assert!(toml_str.contains("[[registries.list]]"));
     assert!(toml_str.contains("name = \"dockerhub\""));
     assert!(toml_str.contains("name = \"local\""));
+    assert!(toml_str.contains("dockerhub_compat = true"));
 }
 
 #[test]
@@ -280,16 +285,93 @@ fn test_registry_entry_equality() {
     let entry1 = RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     };
     let entry2 = RegistryEntry {
         name: "local".to_string(),
         url: "http://localhost:5000".to_string(),
+        dockerhub_compat: false,
     };
     let entry3 = RegistryEntry {
         name: "remote".to_string(),
         url: "http://example.com".to_string(),
+        dockerhub_compat: true,
     };
 
     assert_eq!(entry1, entry2);
     assert_ne!(entry1, entry3);
+}
+
+#[test]
+fn test_registry_entry_dockerhub_compat_defaults_to_false() {
+    let toml_str = r#"
+[[registries.list]]
+name = "zot"
+url = "https://zothub.io"
+"#;
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.registries.list.len(), 1);
+    assert_eq!(config.registries.list[0].dockerhub_compat, false);
+}
+
+#[test]
+fn test_registry_entry_dockerhub_compat_true() {
+    let toml_str = r#"
+[[registries.list]]
+name = "dockerhub"
+url = "https://registry-1.docker.io"
+dockerhub_compat = true
+"#;
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.registries.list.len(), 1);
+    assert_eq!(config.registries.list[0].dockerhub_compat, true);
+}
+
+#[test]
+fn test_registry_entry_dockerhub_compat_false_explicit() {
+    let toml_str = r#"
+[[registries.list]]
+name = "ghcr"
+url = "https://ghcr.io"
+dockerhub_compat = false
+"#;
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.registries.list.len(), 1);
+    assert_eq!(config.registries.list[0].dockerhub_compat, false);
+}
+
+#[test]
+fn test_registry_entry_mixed_dockerhub_compat() {
+    let toml_str = r#"
+[registries]
+default = "zot"
+
+[[registries.list]]
+name = "zot"
+url = "https://zothub.io"
+dockerhub_compat = false
+
+[[registries.list]]
+name = "dockerhub"
+url = "https://registry-1.docker.io"
+dockerhub_compat = true
+
+[[registries.list]]
+name = "ghcr"
+url = "https://ghcr.io"
+"#;
+    let config: Config = toml::from_str(toml_str).unwrap();
+    assert_eq!(config.registries.list.len(), 3);
+
+    // Zot: explicitly false
+    assert_eq!(config.registries.list[0].name, "zot");
+    assert_eq!(config.registries.list[0].dockerhub_compat, false);
+
+    // Docker Hub: explicitly true
+    assert_eq!(config.registries.list[1].name, "dockerhub");
+    assert_eq!(config.registries.list[1].dockerhub_compat, true);
+
+    // GHCR: defaults to false
+    assert_eq!(config.registries.list[2].name, "ghcr");
+    assert_eq!(config.registries.list[2].dockerhub_compat, false);
 }
