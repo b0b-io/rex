@@ -11,6 +11,7 @@ use librex::Credentials;
 use librex::auth::CredentialStore;
 
 use super::Result;
+use super::banner::{BannerManager, BannerType};
 use super::events::Event;
 use super::theme::Theme;
 use super::views::details::ImageDetailsState;
@@ -96,6 +97,10 @@ pub struct App {
     pub vim_mode: bool,
     /// Maximum number of parallel connections
     concurrency: usize,
+
+    // UI Components
+    /// Banner manager for status messages
+    pub banners: BannerManager,
 }
 
 #[allow(dead_code)] // TODO: Remove when integrated into main TUI loop
@@ -176,6 +181,7 @@ impl App {
             theme,
             vim_mode,
             concurrency,
+            banners: BannerManager::new(),
         })
     }
 
@@ -434,6 +440,9 @@ impl App {
     /// This should be called regularly in the main loop to handle
     /// asynchronous updates from worker threads.
     pub fn process_messages(&mut self) {
+        // Process auto-dismiss for banners (e.g., success messages after 5s)
+        self.banners.process_auto_dismiss();
+
         while let Ok(msg) = self.rx.try_recv() {
             self.handle_message(msg);
         }
@@ -447,16 +456,28 @@ impl App {
     fn handle_message(&mut self, msg: Message) {
         match msg {
             Message::RepositoriesLoaded(Ok(items)) => {
+                // Clear any loading banners
+                self.banners.remove_type(BannerType::Loading);
+
                 // Update repository list with metadata
                 self.repositories = items.iter().map(|item| item.name.clone()).collect();
                 self.repo_list_state.items = items;
                 self.repo_list_state.loading = false;
             }
-            Message::RepositoriesLoaded(Err(_)) => {
+            Message::RepositoriesLoaded(Err(err)) => {
                 self.repo_list_state.loading = false;
-                // TODO: Show error banner
+
+                // Clear loading banners and show error
+                self.banners.remove_type(BannerType::Loading);
+                self.banners.add(
+                    format!("Failed to load repositories: {}", err),
+                    BannerType::Error,
+                );
             }
             Message::TagsLoaded(repo, Ok(tag_infos)) => {
+                // Clear any loading banners
+                self.banners.remove_type(BannerType::Loading);
+
                 // Store tag names for internal tracking
                 let tag_names: Vec<String> = tag_infos.iter().map(|t| t.tag.clone()).collect();
                 self.tags.insert(repo.clone(), tag_names);
@@ -468,9 +489,15 @@ impl App {
                     self.tag_list_state.loading = false;
                 }
             }
-            Message::TagsLoaded(_, Err(_)) => {
+            Message::TagsLoaded(repo, Err(err)) => {
                 self.tag_list_state.loading = false;
-                // TODO: Show error banner
+
+                // Clear loading banners and show error
+                self.banners.remove_type(BannerType::Loading);
+                self.banners.add(
+                    format!("Failed to load tags for {}: {}", repo, err),
+                    BannerType::Error,
+                );
             }
             Message::ManifestLoaded(repo, tag, result) => {
                 // Update details state if we're currently viewing this image
@@ -480,9 +507,15 @@ impl App {
                             self.details_state.manifest = Some(manifest);
                             // Don't clear loading yet - wait for config to load too
                         }
-                        Err(_) => {
+                        Err(err) => {
                             self.details_state.loading = false;
-                            // TODO: Show error banner
+
+                            // Clear loading banners and show error
+                            self.banners.remove_type(BannerType::Loading);
+                            self.banners.add(
+                                format!("Failed to load manifest for {}:{}: {}", repo, tag, err),
+                                BannerType::Error,
+                            );
                         }
                     }
                 }
@@ -494,16 +527,23 @@ impl App {
                         Ok(config) => {
                             self.details_state.config = Some(config);
                             self.details_state.loading = false;
+
+                            // Clear loading banners when manifest+config both loaded
+                            self.banners.remove_type(BannerType::Loading);
                         }
                         Err(_) => {
                             // Config is optional (may not exist for indexes)
                             self.details_state.loading = false;
+
+                            // Clear loading banners even if config fails (it's optional)
+                            self.banners.remove_type(BannerType::Loading);
                         }
                     }
                 }
             }
-            Message::Error(_) => {
-                // TODO: Show error banner
+            Message::Error(err) => {
+                // Show generic error banner
+                self.banners.add(err, BannerType::Error);
             }
         }
     }
@@ -569,6 +609,11 @@ impl App {
     /// ```
     pub fn load_repositories(&mut self, concurrency: usize) {
         self.repo_list_state.loading = true;
+
+        // Show loading banner
+        self.banners
+            .add("Loading repositories...".to_string(), BannerType::Loading);
+
         let registry_url = self.current_registry.clone();
         let cache_dir = self.cache_dir.clone();
         let credentials = self.credentials.clone();
@@ -608,6 +653,13 @@ impl App {
     /// ```
     pub fn load_tags(&mut self, repository: String, concurrency: usize) {
         self.tag_list_state.loading = true;
+
+        // Show loading banner
+        self.banners.add(
+            format!("Loading tags for {}...", repository),
+            BannerType::Loading,
+        );
+
         let registry_url = self.current_registry.clone();
         let cache_dir = self.cache_dir.clone();
         let credentials = self.credentials.clone();
@@ -637,6 +689,13 @@ impl App {
     /// * `tag` - The tag name
     pub fn load_manifest(&mut self, repository: String, tag: String) {
         self.details_state.loading = true;
+
+        // Show loading banner
+        self.banners.add(
+            format!("Loading manifest for {}:{}...", repository, tag),
+            BannerType::Loading,
+        );
+
         let registry_url = self.current_registry.clone();
         let cache_dir = self.cache_dir.clone();
         let credentials = self.credentials.clone();

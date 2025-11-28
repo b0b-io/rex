@@ -3,6 +3,7 @@
 //! Provides an interactive terminal interface for exploring container registries.
 
 pub mod app;
+pub mod banner;
 pub mod events;
 pub mod shell;
 pub mod theme;
@@ -66,11 +67,17 @@ pub fn run(ctx: &crate::context::AppContext) -> Result<()> {
         terminal.draw(|f| {
             let area = f.size();
 
-            // Calculate shell layout (no context bar or status line for now)
-            let layout = ShellLayout::calculate(area, false, false);
+            // Calculate shell layout with context bar if there are active banners
+            let has_context = app.banners.has_banners();
+            let layout = ShellLayout::calculate(area, has_context, false);
 
             // Render title bar
             title_bar.render(f, layout.title_bar, &app.theme);
+
+            // Render context bar (banners) if present
+            if let Some(context_area) = layout.context_bar {
+                app.banners.render(f, context_area, &app.theme);
+            }
 
             // Render content based on current view
             match &app.current_view {
