@@ -4,6 +4,44 @@
 default:
     @just --list
 
+# Install Rust toolchain using rustup (for environments without cargo)
+setup-toolchain:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "=== Rex Toolchain Setup ==="
+    echo ""
+
+    # Check if rustup is installed
+    if ! command -v rustup &> /dev/null; then
+        echo "❌ rustup is not installed. Installing rustup..."
+        echo ""
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        echo ""
+        echo "✓ rustup installed successfully"
+        echo ""
+        # Source cargo env for current shell
+        source "$HOME/.cargo/env"
+    else
+        echo "✓ rustup is already installed"
+    fi
+
+    echo ""
+    echo "=== Installing Rust stable toolchain ==="
+    rustup toolchain install stable
+    rustup default stable
+
+    echo ""
+    echo "=== Verifying installation ==="
+    rustc --version
+    cargo --version
+
+    echo ""
+    echo "✓ Toolchain setup complete!"
+    echo ""
+    echo "You may need to run: source ~/.cargo/env"
+    echo "Or restart your shell to use cargo commands."
+
 # Lint documentation files with markdownlint (use 'just docs fix' to auto-fix)
 docs fix="":
     #!/usr/bin/env bash

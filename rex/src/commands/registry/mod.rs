@@ -62,6 +62,8 @@ pub struct RegistryDisplay {
     pub default: String,
     #[tabled(rename = "AUTH")]
     pub auth: String,
+    #[tabled(rename = "DOCKER HUB")]
+    pub dockerhub_compat: String,
 }
 
 /// Registry check result
@@ -322,6 +324,11 @@ pub(crate) fn show_registry(config_path: &PathBuf, name: &str) -> Result<Registr
         } else {
             String::new()
         },
+        dockerhub_compat: if registry.dockerhub_compat {
+            "✓".to_string()
+        } else {
+            String::new()
+        },
     })
 }
 
@@ -361,6 +368,11 @@ pub(crate) fn list_registries(config_path: &PathBuf) -> Result<Vec<RegistryDispl
                     String::new()
                 },
                 auth: if authenticated {
+                    "✓".to_string()
+                } else {
+                    String::new()
+                },
+                dockerhub_compat: if r.dockerhub_compat {
                     "✓".to_string()
                 } else {
                     String::new()
