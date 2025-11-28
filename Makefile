@@ -1,9 +1,11 @@
 # Rex - Makefile wrapper for just commands
 # This Makefile provides a familiar interface for users who prefer make over just.
 # All commands delegate to the justfile for actual implementation.
+# The 'just' command runner is automatically installed if not present.
 
 .PHONY: help setup-toolchain docs docs-fix build build-release test test-verbose \
-        coverage coverage-summary lint lint-fix fmt fmt-check check clean run install stats
+        coverage coverage-summary lint lint-fix fmt fmt-check check clean run install stats \
+        install-just
 
 # Default target - show help
 help:
@@ -12,6 +14,7 @@ help:
 	@echo "Available targets:"
 	@echo "  make help              - Show this help message"
 	@echo "  make setup-toolchain   - Install Rust toolchain using rustup"
+	@echo "  make install-just      - Install 'just' command runner"
 	@echo ""
 	@echo "Development:"
 	@echo "  make build             - Build the project in debug mode"
@@ -38,73 +41,107 @@ help:
 	@echo "  make install           - Install binary locally"
 	@echo "  make stats             - Show project statistics"
 	@echo ""
-	@echo "Note: This Makefile wraps 'just' commands. Install just:"
-	@echo "  cargo install just"
+	@echo "Note: 'just' will be automatically installed if not present."
 	@echo ""
 
-# Toolchain setup
+# Install just command runner if not already installed
+install-just:
+	@if ! command -v just >/dev/null 2>&1; then \
+		echo "📦 Installing 'just' command runner..."; \
+		if command -v cargo >/dev/null 2>&1; then \
+			cargo install just; \
+			echo "✓ 'just' installed successfully"; \
+		else \
+			echo "❌ Error: cargo not found. Please install Rust first:"; \
+			echo "   Run: make setup-toolchain"; \
+			exit 1; \
+		fi \
+	else \
+		echo "✓ 'just' is already installed"; \
+	fi
+
+# Internal target to ensure just is available
+# This is a dependency for all commands that need just
+.ensure-just:
+	@if ! command -v just >/dev/null 2>&1; then \
+		echo "⚠️  'just' command not found. Installing..."; \
+		if command -v cargo >/dev/null 2>&1; then \
+			cargo install just; \
+		else \
+			echo ""; \
+			echo "❌ Error: 'just' is not installed and cargo is not available."; \
+			echo ""; \
+			echo "To fix this, either:"; \
+			echo "  1. Install Rust toolchain first: make setup-toolchain"; \
+			echo "  2. Or install just manually: cargo install just"; \
+			echo ""; \
+			exit 1; \
+		fi \
+	fi
+
+# Toolchain setup (doesn't need just)
 setup-toolchain:
-	@just setup-toolchain
+	@just setup-toolchain || $(MAKE) install-just && just setup-toolchain
 
 # Documentation
-docs:
+docs: .ensure-just
 	@just docs
 
-docs-fix:
+docs-fix: .ensure-just
 	@just docs fix
 
 # Build commands
-build:
+build: .ensure-just
 	@just build
 
-build-release:
+build-release: .ensure-just
 	@just build-release
 
 # Test commands
-test:
+test: .ensure-just
 	@just test
 
-test-verbose:
+test-verbose: .ensure-just
 	@just test-verbose
 
 # Coverage
-coverage:
+coverage: .ensure-just
 	@just coverage
 
-coverage-summary:
+coverage-summary: .ensure-just
 	@just coverage-summary
 
 # Linting
-lint:
+lint: .ensure-just
 	@just lint
 
-lint-fix:
+lint-fix: .ensure-just
 	@just lint fix
 
 # Formatting
-fmt:
+fmt: .ensure-just
 	@just fmt
 
-fmt-check:
+fmt-check: .ensure-just
 	@just fmt check
 
 # Combined checks
-check:
+check: .ensure-just
 	@just check
 
 # Clean
-clean:
+clean: .ensure-just
 	@just clean
 
 # Run with arguments
 # Usage: make run ARGS="image tags alpine"
-run:
+run: .ensure-just
 	@just run $(ARGS)
 
 # Install
-install:
+install: .ensure-just
 	@just install
 
 # Statistics
-stats:
+stats: .ensure-just
 	@just stats
