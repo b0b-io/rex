@@ -3,7 +3,9 @@
 # All commands delegate to the justfile for actual implementation.
 # The 'just' command runner is automatically installed if not present.
 
-.PHONY: help setup-toolchain docs docs-fix build build-release test test-verbose \
+.DEFAULT_GOAL := build
+
+.PHONY: help setup-toolchain setup-dev-tools docs docs-fix build build-release test test-verbose \
         coverage coverage-summary lint lint-fix fmt fmt-check check clean run install stats \
         install-just
 
@@ -12,8 +14,12 @@ help:
 	@echo "Rex - Makefile wrapper for just commands"
 	@echo ""
 	@echo "Available targets:"
+	@echo "  make                   - Build the project (default)"
 	@echo "  make help              - Show this help message"
+	@echo ""
+	@echo "Setup:"
 	@echo "  make setup-toolchain   - Install Rust toolchain using rustup"
+	@echo "  make setup-dev-tools   - Install cargo dev tools (tokei, cargo-llvm-cov)"
 	@echo "  make install-just      - Install 'just' command runner"
 	@echo ""
 	@echo "Development:"
@@ -30,18 +36,21 @@ help:
 	@echo "  make lint-fix          - Run clippy and auto-fix issues"
 	@echo "  make fmt               - Format code with rustfmt"
 	@echo "  make fmt-check         - Check formatting without changes"
-	@echo "  make docs              - Lint documentation files"
+	@echo "  make docs              - Lint documentation (optional: needs markdownlint-cli2)"
 	@echo "  make docs-fix          - Lint and auto-fix documentation"
 	@echo ""
-	@echo "Coverage:"
-	@echo "  make coverage          - Generate code coverage report"
-	@echo "  make coverage-summary  - Show coverage summary"
+	@echo "Coverage & Stats:"
+	@echo "  make coverage          - Generate code coverage report (needs cargo-llvm-cov)"
+	@echo "  make coverage-summary  - Show coverage summary (needs cargo-llvm-cov)"
+	@echo "  make stats             - Show project statistics (needs tokei)"
 	@echo ""
 	@echo "Other:"
 	@echo "  make install           - Install binary locally"
-	@echo "  make stats             - Show project statistics"
 	@echo ""
-	@echo "Note: 'just' will be automatically installed if not present."
+	@echo "Notes:"
+	@echo "  • Cargo/rustc will be automatically installed if not present"
+	@echo "  • Run 'make setup-dev-tools' to install all cargo-based tools"
+	@echo "  • Markdown linting requires: npm install -g markdownlint-cli2"
 	@echo ""
 
 # Install just command runner if not already installed
@@ -82,6 +91,10 @@ install-just:
 # Toolchain setup (doesn't need just)
 setup-toolchain:
 	@just setup-toolchain || $(MAKE) install-just && just setup-toolchain
+
+# Development tools setup
+setup-dev-tools: .ensure-just
+	@just setup-dev-tools
 
 # Documentation
 docs: .ensure-just

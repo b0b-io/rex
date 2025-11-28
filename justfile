@@ -4,6 +4,10 @@
 default:
     @just --list
 
+# Ensure cargo is available (installs toolchain if missing)
+ensure-cargo:
+    @command -v cargo >/dev/null 2>&1 || just setup-toolchain
+
 # Install Rust toolchain using rustup (for environments without cargo)
 setup-toolchain:
     #!/usr/bin/env bash
@@ -42,9 +46,47 @@ setup-toolchain:
     echo "You may need to run: source ~/.cargo/env"
     echo "Or restart your shell to use cargo commands."
 
+# Install cargo-based development tools (tokei, cargo-llvm-cov)
+setup-dev-tools: setup-toolchain
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "=== Installing Cargo Development Tools ==="
+    echo ""
+
+    # Install tokei for code statistics
+    if ! command -v tokei &> /dev/null; then
+        echo "📦 Installing tokei..."
+        cargo install tokei
+        echo "✓ tokei installed"
+    else
+        echo "✓ tokei is already installed"
+    fi
+
+    echo ""
+
+    # Install cargo-llvm-cov for code coverage
+    if ! command -v cargo-llvm-cov &> /dev/null; then
+        echo "📦 Installing cargo-llvm-cov..."
+        cargo install cargo-llvm-cov
+        echo "✓ cargo-llvm-cov installed"
+    else
+        echo "✓ cargo-llvm-cov is already installed"
+    fi
+
+    echo ""
+    echo "✓ All development tools installed!"
+
 # Lint documentation files with markdownlint (use 'just docs fix' to auto-fix)
+# Optional: Skips gracefully if markdownlint-cli2 is not installed
 docs fix="":
     #!/usr/bin/env bash
+    if ! command -v markdownlint-cli2 &> /dev/null; then
+        echo "⚠️  markdownlint-cli2 not found. Skipping documentation linting."
+        echo "   Install with: npm install -g markdownlint-cli2"
+        exit 0
+    fi
+
     if [ "{{fix}}" = "fix" ]; then
         markdownlint-cli2 --fix "docs/**/*.md"
     else
@@ -52,7 +94,7 @@ docs fix="":
     fi
 
 # Build the project (optionally specify target: just build <target>)
-build target="":
+build target="": ensure-cargo
     #!/usr/bin/env bash
     if [ -n "{{target}}" ]; then
         cargo build --target {{target}}
@@ -61,7 +103,7 @@ build target="":
     fi
 
 # Build the project in release mode (optionally specify target: just build-release <target>)
-build-release target="":
+build-release target="": ensure-cargo
     #!/usr/bin/env bash
     if [ -n "{{target}}" ]; then
         cargo build --release --target {{target}}
@@ -70,23 +112,25 @@ build-release target="":
     fi
 
 # Run tests
-test:
+test: ensure-cargo
     cargo test
 
 # Run tests with output
-test-verbose:
+test-verbose: ensure-cargo
     cargo test -- --nocapture
 
-# Generate code coverage report (requires cargo-llvm-cov: cargo install cargo-llvm-cov)
-coverage:
+# Generate code coverage report (requires cargo-llvm-cov)
+# Run 'just setup-dev-tools' to install required tools
+coverage: ensure-cargo
     cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
-# Generate coverage report
-coverage-summary:
+# Generate coverage summary (requires cargo-llvm-cov)
+# Run 'just setup-dev-tools' to install required tools
+coverage-summary: ensure-cargo
     cargo llvm-cov --all-features --workspace --summary-only
 
 # Run clippy for linting (use 'just lint fix' to auto-fix)
-lint fix="":
+lint fix="": ensure-cargo
     #!/usr/bin/env bash
     if [ "{{fix}}" = "fix" ]; then
         cargo clippy --fix --allow-dirty --allow-staged -- -D warnings
@@ -95,7 +139,7 @@ lint fix="":
     fi
 
 # Format code with rustfmt (use 'just fmt check' to only check)
-fmt mode="":
+fmt mode="": ensure-cargo
     #!/usr/bin/env bash
     if [ "{{mode}}" = "check" ]; then
         cargo fmt -- --check
@@ -104,25 +148,26 @@ fmt mode="":
     fi
 
 # Check formatting without making changes (alias for 'just fmt check')
-fmt-check:
+fmt-check: ensure-cargo
     @just fmt check
 
 # Run all checks (docs, fmt-check, lint)
-check: docs fmt-check lint
+check: ensure-cargo docs fmt-check lint
 
 # Clean build artifacts
-clean:
+clean: ensure-cargo
     cargo clean
 
 # Run the CLI in development mode
-run *ARGS:
+run *ARGS: ensure-cargo
     cargo run -- {{ARGS}}
 
 # Install the binary locally
-install:
+install: ensure-cargo
     cargo install --path .
 
-# Show project statistics
+# Show project statistics (requires tokei)
+# Run 'just setup-dev-tools' to install required tools
 stats:
     @echo "=== Code Statistics ==="
     @tokei
