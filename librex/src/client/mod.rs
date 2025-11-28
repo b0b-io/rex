@@ -553,7 +553,10 @@ impl Client {
     ///
     /// Returns a tuple of `(Vec<u8>, String)` where:
     /// - The first element is the raw manifest bytes
-    /// - The second element is the manifest digest from the Docker-Content-Digest header
+    /// - The second element is the manifest digest (from header or computed)
+    ///
+    /// If the Docker-Content-Digest header is missing, the digest is computed
+    /// from the response bytes using SHA256.
     ///
     /// # Errors
     ///
@@ -561,7 +564,6 @@ impl Client {
     /// - The registry is unreachable
     /// - The repository or reference does not exist
     /// - Authentication is required but not provided
-    /// - The Docker-Content-Digest header is missing
     pub fn fetch_manifest(&self, repository: &str, reference: &str) -> Result<(Vec<u8>, String)> {
         let url = format!(
             "{}/v2/{}/manifests/{}",
@@ -592,12 +594,11 @@ impl Client {
             .map_err(|e| Self::translate_reqwest_error(e, &self.registry_url))?;
 
         // Extract Docker-Content-Digest header before consuming response
-        let digest = response
+        let digest_from_header = response
             .headers()
             .get("Docker-Content-Digest")
             .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string())
-            .ok_or_else(|| RexError::validation("Response missing Docker-Content-Digest header"))?;
+            .map(|s| s.to_string());
 
         let response = Self::check_response_status(response)?;
 
@@ -605,6 +606,17 @@ impl Client {
         let manifest_bytes = response
             .bytes()
             .map_err(|e| RexError::network_with_source("Failed to read manifest response", e))?;
+
+        // Use header digest if available, otherwise compute from bytes
+        let digest = if let Some(d) = digest_from_header {
+            d
+        } else {
+            // Compute digest from bytes using sha256
+            use sha2::{Digest as Sha2Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(&manifest_bytes);
+            format!("sha256:{:x}", hasher.finalize())
+        };
 
         Ok((manifest_bytes.to_vec(), digest))
     }

@@ -1047,6 +1047,7 @@ fn test_fetch_manifest_success() {
 fn test_fetch_manifest_missing_digest_header() {
     let mut server = mockito::Server::new();
 
+    let manifest_body = r#"{"schemaVersion":2}"#;
     let mock = server
         .mock("GET", "/v2/alpine/manifests/latest")
         .with_status(200)
@@ -1054,15 +1055,25 @@ fn test_fetch_manifest_missing_digest_header() {
             "content-type",
             "application/vnd.docker.distribution.manifest.v2+json",
         )
-        .with_body(r#"{"schemaVersion":2}"#)
+        .with_body(manifest_body)
         .create();
 
     let client = Client::new(&server.url(), None).unwrap();
     let result = client.fetch_manifest("alpine", "latest");
 
     mock.assert();
-    assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), RexError::Validation { .. }));
+    // Should succeed by computing digest from response body
+    assert!(result.is_ok());
+    let (bytes, digest) = result.unwrap();
+    assert_eq!(bytes, manifest_body.as_bytes());
+    // Verify digest was computed (starts with sha256:)
+    assert!(digest.starts_with("sha256:"));
+    // Verify it matches the computed hash of the manifest body
+    use sha2::{Digest as Sha2Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(manifest_body.as_bytes());
+    let expected_digest = format!("sha256:{:x}", hasher.finalize());
+    assert_eq!(digest, expected_digest);
 }
 
 #[test]
