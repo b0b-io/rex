@@ -41,6 +41,8 @@ pub enum View {
 pub enum Message {
     /// Repositories loaded successfully or with error (includes tag counts)
     RepositoriesLoaded(Result<Vec<RepositoryItem>>),
+    /// Progress update for repository fetching (current, total)
+    RepositoryProgress(usize, usize),
     /// Tags with metadata loaded for a repository
     TagsLoaded(String, Result<Vec<crate::image::TagInfo>>),
     /// Manifest loaded for an image
@@ -463,6 +465,9 @@ impl App {
                 self.repositories = items.iter().map(|item| item.name.clone()).collect();
                 self.repo_list_state.items = items;
                 self.repo_list_state.loading = false;
+
+                // Clear progress tracking
+                self.repo_list_state.progress = None;
             }
             Message::RepositoriesLoaded(Err(err)) => {
                 self.repo_list_state.loading = false;
@@ -473,6 +478,13 @@ impl App {
                     format!("Failed to load repositories: {}", err),
                     BannerType::Error,
                 );
+
+                // Clear progress tracking
+                self.repo_list_state.progress = None;
+            }
+            Message::RepositoryProgress(current, total) => {
+                // Update progress state
+                self.repo_list_state.progress = Some((current, total));
             }
             Message::TagsLoaded(repo, Ok(tag_infos)) => {
                 // Clear any loading banners

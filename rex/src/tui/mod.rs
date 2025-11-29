@@ -5,6 +5,7 @@
 pub mod app;
 pub mod banner;
 pub mod events;
+pub mod progress;
 pub mod shell;
 pub mod theme;
 pub mod views;

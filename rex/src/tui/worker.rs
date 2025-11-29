@@ -4,6 +4,8 @@
 //! threads, sending results back to the UI thread via channels.
 
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;
 
 use librex::{Credentials, Rex};
@@ -50,7 +52,51 @@ pub fn fetch_repositories(
 ) {
     let cache_dir_owned = cache_dir.to_path_buf();
 
-    // Use RepositoryMetadataFetcher for parallel metadata fetching
+    // First, get the repository count for progress tracking
+    // Build a Rex client to fetch the repository list
+    let mut builder = Rex::builder()
+        .registry_url(&registry_url)
+        .with_cache(&cache_dir_owned);
+
+    if let Some(ref creds) = credentials {
+        builder = builder.with_credentials(creds.clone());
+    }
+
+    let mut rex = match builder.build() {
+        Ok(rex) => rex,
+        Err(e) => {
+            let result: Result<Vec<crate::image::RepositoryItem>> = Err(Box::new(
+                std::io::Error::other(format!("Failed to connect to registry: {}", e)),
+            ));
+            let _ = tx.send(Message::RepositoriesLoaded(result));
+            return;
+        }
+    };
+
+    // Fetch repository list to get the total count
+    let repo_list = match rex.list_repositories() {
+        Ok(repos) => repos,
+        Err(e) => {
+            let result: Result<Vec<crate::image::RepositoryItem>> = Err(Box::new(
+                std::io::Error::other(format!("Failed to list repositories: {}", e)),
+            ));
+            let _ = tx.send(Message::RepositoriesLoaded(result));
+            return;
+        }
+    };
+
+    let total = repo_list.len();
+
+    // Send initial progress (0/total)
+    let _ = tx.send(Message::RepositoryProgress(0, total));
+
+    // If no repositories, send empty result
+    if total == 0 {
+        let _ = tx.send(Message::RepositoriesLoaded(Ok(Vec::new())));
+        return;
+    }
+
+    // Create fetcher for parallel metadata fetching
     let fetcher = crate::image::RepositoryMetadataFetcher::new(
         registry_url,
         &cache_dir_owned,
@@ -58,11 +104,22 @@ pub fn fetch_repositories(
         concurrency,
     );
 
-    let result = fetcher.fetch_repositories(None::<fn()>).map_err(|e| {
-        Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send + Sync>
-    });
+    // Track progress with atomic counter
+    let counter = Arc::new(AtomicUsize::new(0));
+    let counter_clone = Arc::clone(&counter);
+    let tx_clone = tx.clone();
 
-    // Send result back to UI thread
+    // Fetch with progress callback
+    let result = fetcher
+        .fetch_repositories(Some(move || {
+            let current = counter_clone.fetch_add(1, Ordering::Relaxed) + 1;
+            let _ = tx_clone.send(Message::RepositoryProgress(current, total));
+        }))
+        .map_err(|e| {
+            Box::new(std::io::Error::other(e)) as Box<dyn std::error::Error + Send + Sync>
+        });
+
+    // Send final result back to UI thread
     let _ = tx.send(Message::RepositoriesLoaded(result));
 }
 
