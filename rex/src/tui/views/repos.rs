@@ -8,6 +8,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Row, Table},
 };
 
+use crate::tui::progress::ProgressBar;
 use crate::tui::theme::Theme;
 
 // Re-export RepositoryItem from shared image module
@@ -27,6 +28,8 @@ pub struct RepositoryListState {
     pub loading: bool,
     /// Filter string for searching repositories
     pub filter: String,
+    /// Progress tracking for loading operations (current, total)
+    pub progress: Option<(usize, usize)>,
 }
 
 #[allow(dead_code)] // TODO: Remove when integrated into main TUI loop (Task 3.3)
@@ -49,6 +52,7 @@ impl RepositoryListState {
             scroll_offset: 0,
             loading: false,
             filter: String::new(),
+            progress: None,
         }
     }
 
@@ -196,6 +200,15 @@ impl RepositoryListState {
     /// * `area` - The rectangular area to render in
     /// * `theme` - The theme to use for styling
     pub fn render(&self, frame: &mut Frame, area: Rect, theme: &Theme) {
+        // If progress tracking is active and no items loaded yet, show centered progress bar
+        if let Some((current, total)) = self.progress
+            && self.items.is_empty()
+        {
+            let progress = ProgressBar::new(current, total, "Fetching image information");
+            progress.render(frame, area, theme);
+            return;
+        }
+
         let items = self.filtered_items();
 
         // Header row
