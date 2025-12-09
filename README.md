@@ -48,7 +48,7 @@ just build-release
 
 ```bash
 # Run development version
-just run -- --help
+just run --help
 
 # Or use cargo directly
 cargo run -- --help
