@@ -116,13 +116,6 @@ pub fn handle_registry_list(ctx: &crate::context::AppContext, format: OutputForm
                         std::process::exit(1);
                     }
                 },
-                OutputFormat::Yaml => match serde_yaml::to_string(&registries) {
-                    Ok(yaml) => print!("{}", yaml),
-                    Err(e) => {
-                        format::error(ctx, &format!("formatting YAML: {}", e));
-                        std::process::exit(1);
-                    }
-                },
             }
         }
         Err(e) => {

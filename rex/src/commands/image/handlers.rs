@@ -75,13 +75,6 @@ pub fn handle_image_list(
                 std::process::exit(1);
             }
         },
-        OutputFormat::Yaml => match serde_yaml::to_string(&images) {
-            Ok(yaml) => print!("{}", yaml),
-            Err(e) => {
-                eprintln!("Error formatting YAML: {}", e);
-                std::process::exit(1);
-            }
-        },
     }
 }
 
@@ -153,13 +146,6 @@ pub fn handle_image_tags(
                 std::process::exit(1);
             }
         },
-        OutputFormat::Yaml => match serde_yaml::to_string(&tags) {
-            Ok(yaml) => print!("{}", yaml),
-            Err(e) => {
-                eprintln!("Error formatting YAML: {}", e);
-                std::process::exit(1);
-            }
-        },
     }
 }
 
@@ -202,13 +188,6 @@ pub fn handle_image_details(
             Ok(json) => println!("{}", json),
             Err(e) => {
                 eprintln!("Error formatting JSON: {}", e);
-                std::process::exit(1);
-            }
-        },
-        OutputFormat::Yaml => match serde_yaml::to_string(&details) {
-            Ok(yaml) => print!("{}", yaml),
-            Err(e) => {
-                eprintln!("Error formatting YAML: {}", e);
                 std::process::exit(1);
             }
         },
@@ -269,13 +248,6 @@ pub fn handle_image_inspect(
             Ok(json) => println!("{}", json),
             Err(e) => {
                 eprintln!("Error formatting JSON: {}", e);
-                std::process::exit(1);
-            }
-        },
-        OutputFormat::Yaml => match serde_yaml::to_string(&inspect) {
-            Ok(yaml) => print!("{}", yaml),
-            Err(e) => {
-                eprintln!("Error formatting YAML: {}", e);
                 std::process::exit(1);
             }
         },

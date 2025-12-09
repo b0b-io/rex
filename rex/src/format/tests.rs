@@ -17,7 +17,6 @@ impl Formattable for TestData {
 fn test_output_format_from_string() {
     assert_eq!(OutputFormat::from("pretty"), OutputFormat::Pretty);
     assert_eq!(OutputFormat::from("json"), OutputFormat::Json);
-    assert_eq!(OutputFormat::from("yaml"), OutputFormat::Yaml);
     assert_eq!(OutputFormat::from("invalid"), OutputFormat::Pretty);
 }
 
@@ -43,19 +42,6 @@ fn test_format_json() {
     let json: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
     assert_eq!(json["name"], "test");
     assert_eq!(json["value"], 42);
-}
-
-#[test]
-fn test_format_yaml() {
-    let data = TestData {
-        name: "test".to_string(),
-        value: 42,
-    };
-    let result = format_output(&data, OutputFormat::Yaml);
-    assert!(result.is_ok());
-    let output = result.unwrap();
-    assert!(output.contains("name: test"));
-    assert!(output.contains("value: 42"));
 }
 
 #[test]

@@ -206,7 +206,6 @@ pub fn get_config_value(config_path: &PathBuf, key: &str) -> Result<String, Stri
         ["style", "format"] => Ok(match config.style.format {
             OutputFormat::Pretty => "pretty".to_string(),
             OutputFormat::Json => "json".to_string(),
-            OutputFormat::Yaml => "yaml".to_string(),
         }),
         ["style", "color"] => Ok(config.style.color.to_string()),
         ["tui", "theme"] => Ok(config.tui.theme.clone()),
