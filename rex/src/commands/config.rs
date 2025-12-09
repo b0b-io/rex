@@ -9,7 +9,6 @@ impl Formattable for config::Config {
             match self.style.format {
                 OutputFormat::Pretty => "pretty",
                 OutputFormat::Json => "json",
-                OutputFormat::Yaml => "yaml",
             },
             self.style.color
         );

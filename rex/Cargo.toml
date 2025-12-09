@@ -16,7 +16,6 @@ clap_complete = "4.5"
 dirs = "6.0.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
-serde_yaml = "0.9.34"
 toml = { version = "0.9.8", features = ["preserve_order"] }
 tabled = { version = "0.20.0", features = ["ansi"] }
 url = "2.5.7"

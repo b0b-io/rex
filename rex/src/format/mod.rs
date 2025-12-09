@@ -233,15 +233,12 @@ pub enum OutputFormat {
     Pretty,
     /// JSON format
     Json,
-    /// YAML format
-    Yaml,
 }
 
 impl From<&str> for OutputFormat {
     fn from(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "json" => OutputFormat::Json,
-            "yaml" | "yml" => OutputFormat::Yaml,
             _ => OutputFormat::Pretty,
         }
     }
@@ -259,9 +256,6 @@ pub fn format_output<T: Formattable>(item: &T, format: OutputFormat) -> Result<S
         OutputFormat::Pretty => Ok(item.format_pretty()),
         OutputFormat::Json => serde_json::to_string_pretty(item)
             .map_err(|e| format!("Failed to serialize to JSON: {}", e)),
-        OutputFormat::Yaml => {
-            serde_yaml::to_string(item).map_err(|e| format!("Failed to serialize to YAML: {}", e))
-        }
     }
 }
 
@@ -278,9 +272,6 @@ pub fn format_output_vec<T: Formattable>(
         }
         OutputFormat::Json => serde_json::to_string_pretty(items)
             .map_err(|e| format!("Failed to serialize to JSON: {}", e)),
-        OutputFormat::Yaml => {
-            serde_yaml::to_string(items).map_err(|e| format!("Failed to serialize to YAML: {}", e))
-        }
     }
 }
 
