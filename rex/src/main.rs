@@ -134,6 +134,12 @@ enum ImageCommands {
         /// Skip confirmation prompt
         #[arg(short, long)]
         force: bool,
+        /// Only delete tags older than this many days
+        #[arg(long, value_name = "DAYS")]
+        older_than: Option<u64>,
+        /// Preview what would be deleted without actually deleting
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -385,13 +391,7 @@ fn main() {
                 limit,
             } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::image::handlers::handle_image_list(
-                    &ctx,
-                    fmt,
-                    quiet,
-                    filter.as_deref(),
-                    limit,
-                );
+                commands::image::handle_image_list(&ctx, fmt, quiet, filter.as_deref(), limit);
             }
             ImageCommands::Tags {
                 name,
@@ -401,7 +401,7 @@ fn main() {
                 limit,
             } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::image::handlers::handle_image_tags(
+                commands::image::handle_image_tags(
                     &ctx,
                     name.as_str(),
                     fmt,
@@ -412,7 +412,7 @@ fn main() {
             }
             ImageCommands::Show { reference, format } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::image::handlers::handle_image_details(&ctx, reference.as_str(), fmt);
+                commands::image::handle_image_details(&ctx, reference.as_str(), fmt);
             }
             ImageCommands::Inspect {
                 reference,
@@ -422,7 +422,7 @@ fn main() {
                 raw_config,
             } => {
                 let fmt = format::OutputFormat::from(format.as_str());
-                commands::image::handlers::handle_image_inspect(
+                commands::image::handle_image_inspect(
                     &ctx,
                     reference.as_str(),
                     fmt,
@@ -431,8 +431,19 @@ fn main() {
                     raw_config,
                 );
             }
-            ImageCommands::Remove { reference, force } => {
-                commands::image::handlers::handle_image_remove(&ctx, reference.as_str(), force);
+            ImageCommands::Remove {
+                reference,
+                force,
+                older_than,
+                dry_run,
+            } => {
+                commands::image::handle_image_remove(
+                    &ctx,
+                    reference.as_str(),
+                    force,
+                    older_than,
+                    dry_run,
+                );
             }
         },
         Commands::Search {

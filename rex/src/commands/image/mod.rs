@@ -5,7 +5,19 @@ use librex::auth::CredentialStore;
 use serde::Serialize;
 use std::str::FromStr;
 
-pub mod handlers;
+// Handler modules (one per subcommand)
+pub mod details;
+pub mod inspect;
+pub mod list;
+pub mod remove;
+pub mod tags;
+
+// Re-export public handlers
+pub use details::handle_image_details;
+pub use inspect::handle_image_inspect;
+pub use list::handle_image_list;
+pub use remove::handle_image_remove;
+pub use tags::handle_image_tags;
 
 // Re-export TagInfo and RepositoryItem from shared image module
 pub use crate::image::{RepositoryItem, TagInfo};
@@ -1098,3 +1110,19 @@ pub(crate) fn get_registry_cache_dir(registry_url: &str) -> Result<std::path::Pa
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "list_tests.rs"]
+mod list_tests;
+
+#[cfg(test)]
+#[path = "tags_tests.rs"]
+mod tags_tests;
+
+#[cfg(test)]
+#[path = "details_tests.rs"]
+mod details_tests;
+
+#[cfg(test)]
+#[path = "inspect_tests.rs"]
+mod inspect_tests;

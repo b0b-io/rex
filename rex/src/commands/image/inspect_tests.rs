@@ -45,10 +45,7 @@ fn test_get_image_inspect_manifest_not_found() {
     assert!(err_msg.contains("Failed to fetch manifest"));
 }
 
-// TODO: Full integration test with real OCI structures
-// Currently commented out due to oci-spec validation being very strict about JSON format
-// The success case is tested in integration tests with real registries
-#[allow(dead_code)]
+// Test single-platform image inspection with mocked OCI structures
 #[test]
 fn test_get_image_inspect_single_platform() {
     let mut server = mockito::Server::new();
@@ -63,13 +60,13 @@ fn test_get_image_inspect_single_platform() {
         .create();
 
     // Create a minimal OCI manifest (matching oci-spec format)
-    let manifest_json = r#"{ 
+    let manifest_json = r#"{
     "schemaVersion": 2,
     "mediaType": "application/vnd.oci.image.manifest.v1+json",
     "config": {
         "mediaType": "application/vnd.oci.image.config.v1+json",
         "size": 1024,
-        "digest": "sha256:05d6eacdcaf34accb9bfcc28ce285c4aee9844550f36890488468f9bcceebd76"
+        "digest": "sha256:76eff6f8609d534c7586db61b67b4d1920ae32e08765dbf0033ca165be010c5a"
     },
     "layers": [
         {
@@ -89,7 +86,7 @@ fn test_get_image_inspect_single_platform() {
 }"#;
 
     // Create a minimal OCI image config
-    let config_json = r#"{ 
+    let config_json = r#"{
         "architecture": "amd64",
         "os": "linux",
         "created": "2023-01-01T00:00:00Z",
@@ -147,7 +144,7 @@ fn test_get_image_inspect_single_platform() {
     let _config_mock = server
         .mock(
             "GET",
-            "/v2/test-single/repo/blobs/sha256:05d6eacdcaf34accb9bfcc28ce285c4aee9844550f36890488468f9bcceebd76",
+            "/v2/test-single/repo/blobs/sha256:76eff6f8609d534c7586db61b67b4d1920ae32e08765dbf0033ca165be010c5a",
         )
         .with_status(200)
         .with_header("content-type", "application/vnd.oci.image.config.v1+json")
@@ -167,7 +164,7 @@ fn test_get_image_inspect_single_platform() {
     assert_eq!(inspect.os, "linux");
     assert_eq!(
         inspect.config_digest,
-        "sha256:05d6eacdcaf34accb9bfcc28ce285c4aee9844550f36890488468f9bcceebd76"
+        "sha256:76eff6f8609d534c7586db61b67b4d1920ae32e08765dbf0033ca165be010c5a"
     );
 
     // Verify size calculation (sum of layer sizes)
@@ -244,7 +241,6 @@ fn test_get_image_inspect_single_platform() {
 }
 
 // Test multi-platform image without --platform flag (should error with available platforms)
-#[allow(dead_code)]
 #[test]
 fn test_get_image_inspect_multi_platform_no_flag() {
     let mut server = mockito::Server::new();
@@ -315,7 +311,6 @@ fn test_get_image_inspect_multi_platform_no_flag() {
 }
 
 // Test multi-platform image with valid --platform flag (should fetch specific platform)
-#[allow(dead_code)]
 #[test]
 fn test_get_image_inspect_multi_platform_with_valid_flag() {
     let mut server = mockito::Server::new();
@@ -453,7 +448,6 @@ fn test_get_image_inspect_multi_platform_with_valid_flag() {
 }
 
 // Test multi-platform image with invalid platform (should error with available platforms)
-#[allow(dead_code)]
 #[test]
 fn test_get_image_inspect_multi_platform_invalid_platform() {
     let mut server = mockito::Server::new();
@@ -524,7 +518,6 @@ fn test_get_image_inspect_multi_platform_invalid_platform() {
 }
 
 // Test raw manifest flag returns JSON
-#[allow(dead_code)]
 #[test]
 fn test_get_image_inspect_raw_manifest() {
     let mut server = mockito::Server::new();
@@ -623,7 +616,6 @@ fn test_get_image_inspect_raw_manifest() {
 }
 
 // Test raw config flag returns JSON
-#[allow(dead_code)]
 #[test]
 fn test_get_image_inspect_raw_config() {
     let mut server = mockito::Server::new();
@@ -724,7 +716,6 @@ fn test_get_image_inspect_raw_config() {
 }
 
 // Test both raw flags together
-#[allow(dead_code)]
 #[test]
 fn test_get_image_inspect_both_raw_flags() {
     let mut server = mockito::Server::new();
