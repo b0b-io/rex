@@ -54,6 +54,31 @@ just run --help
 cargo run -- --help
 ```
 
+### Usage Examples
+
+```bash
+# List repositories
+rex image list
+
+# List tags for an image
+rex image tags myapp
+
+# Remove old images (with preview)
+rex image rm myapp --older-than 30 --dry-run
+
+# Remove images older than 90 days (with confirmation)
+rex image rm myapp --older-than 90
+
+# Remove old images without confirmation (for automation)
+rex image rm myapp --older-than 90 --force
+
+# Remove a specific tag
+rex image rm myapp:v1.0.0
+
+# Remove all tags from a repository
+rex image rm myapp
+```
+
 ## Development Commands
 
 All development tasks are managed through [Just](https://github.com/casey/just).
